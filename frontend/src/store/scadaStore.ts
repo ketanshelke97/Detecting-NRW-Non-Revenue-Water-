@@ -1,0 +1,181 @@
+import { create } from 'zustand';
+
+export interface NodeTelemetry {
+  pressure: number;
+  isLeak: boolean;
+  leakProbability: number;
+}
+
+export interface InferenceData {
+  status: string;
+  localization?: Array<{ node_id: string; probability: number }>;
+  dynamics?: string;
+  diameter_mm?: number;
+  loss?: {
+    liters_per_hour: number;
+    financial_loss_inr_per_hour: number;
+  };
+}
+
+export const NET1_BASELINES: Record<string, number> = {
+  '2': 56.0, '9': 54.0, '10': 54.2, '11': 53.8, '12': 52.1,
+  '13': 51.9, '21': 51.2, '22': 53.5, '23': 54.1, '31': 55.0,
+  '32': 54.7, '33': 53.9,
+};
+
+export interface TelemetryHistoryPoint {
+  step: number;
+  timestamp: string;
+  pressures: Record<string, number>;
+  baselines: Record<string, number>;
+  deltas: Record<string, number>;
+  flowLph: number;
+  cumulativeLossM3: number;
+  financialLossInr: number;
+  isLeak: boolean;
+  activeFaultNode?: string | null;
+}
+
+interface ScadaState {
+  selectedNodeId: string | null;
+  activeScenarioId: string | null;
+  isLiveStreamActive: boolean;
+  nodeData: Record<string, NodeTelemetry>;
+  isolatedZoneNodes: string[];
+  
+  // Phase 3 Playback & Simulation State
+  isPlaybackPaused: boolean;
+  playbackSpeed: number;
+  simulationMode: 'live' | 'historical';
+  currentStepIndex: number;
+  totalStepCount: number;
+  currentTimestamp: string;
+  leakStepIndices: number[];
+  latestInference: InferenceData | null;
+  
+  // Phase 3 Step 2 Scenario Catalog State
+  isScenarioCatalogOpen: boolean;
+  activeScenarioMetadata: any;
+
+  // Phase 3 Step 3: Fault Injection State
+  isFaultInjectionPanelOpen: boolean;
+  activeFault: { node_id: string; leak_type: string; diameter_mm: number } | null;
+
+  // Phase 3 Step 4: Time-Series Telemetry History Buffer
+  telemetryHistory: TelemetryHistoryPoint[];
+
+  // Live SCADA DVR Time-Machine State
+  isLiveDvrMode: boolean;
+  dvrScrubIndex: number | null;
+
+  setSelectedNodeId: (id: string | null) => void;
+  setActiveScenarioId: (id: string | null) => void;
+  setLiveStreamActive: (active: boolean) => void;
+  updateNodeTelemetry: (nodeId: string, telemetry: NodeTelemetry) => void;
+  bulkUpdateTelemetry: (data: Record<string, NodeTelemetry>) => void;
+  setIsolatedZoneNodes: (nodes: string[]) => void;
+  
+  // Simulation Control Actions
+  setPlaybackPaused: (paused: boolean) => void;
+  setPlaybackSpeed: (speed: number) => void;
+  setSimulationMode: (mode: 'live' | 'historical') => void;
+  setCurrentStepIndex: (step: number) => void;
+  setTotalStepCount: (total: number) => void;
+  setCurrentTimestamp: (ts: string) => void;
+  setLeakStepIndices: (steps: number[]) => void;
+  setLatestInference: (inf: InferenceData | null) => void;
+  setIsScenarioCatalogOpen: (open: boolean) => void;
+  setActiveScenarioMetadata: (meta: any) => void;
+
+  // Fault injection actions
+  setIsFaultInjectionPanelOpen: (open: boolean) => void;
+  setActiveFault: (fault: { node_id: string; leak_type: string; diameter_mm: number } | null) => void;
+
+  // Telemetry History actions
+  addTelemetryHistoryPoint: (point: TelemetryHistoryPoint) => void;
+  setTelemetryHistory: (points: TelemetryHistoryPoint[]) => void;
+  clearTelemetryHistory: () => void;
+
+  // Live DVR actions
+  setIsLiveDvrMode: (active: boolean) => void;
+  setDvrScrubIndex: (index: number | null) => void;
+  returnToLive: () => void;
+}
+
+export const useScadaStore = create<ScadaState>((set) => ({
+  selectedNodeId: null,
+  activeScenarioId: null,
+  isLiveStreamActive: true,
+  nodeData: {},
+  isolatedZoneNodes: [],
+  
+  isPlaybackPaused: false,
+  playbackSpeed: 1,
+  simulationMode: 'live',
+  currentStepIndex: 0,
+  totalStepCount: 120,
+  currentTimestamp: new Date().toLocaleTimeString(),
+  leakStepIndices: [],
+  latestInference: null,
+  
+  isScenarioCatalogOpen: false,
+  activeScenarioMetadata: null,
+
+  // Fault injection defaults
+  isFaultInjectionPanelOpen: false,
+  activeFault: null,
+
+  // Telemetry History & DVR defaults
+  telemetryHistory: [],
+  isLiveDvrMode: false,
+  dvrScrubIndex: null,
+  
+  setSelectedNodeId: (id) => set({ selectedNodeId: id }),
+  setActiveScenarioId: (id) => set({ activeScenarioId: id }),
+  setLiveStreamActive: (active) => set({ isLiveStreamActive: active }),
+  updateNodeTelemetry: (nodeId, telemetry) => 
+    set((state) => ({
+      nodeData: { ...state.nodeData, [nodeId]: telemetry }
+    })),
+  bulkUpdateTelemetry: (data) =>
+    set((state) => ({
+      nodeData: { ...state.nodeData, ...data }
+    })),
+  setIsolatedZoneNodes: (nodes) => set({ isolatedZoneNodes: nodes }),
+  
+  setPlaybackPaused: (paused) => set({ isPlaybackPaused: paused }),
+  setPlaybackSpeed: (speed) => set({ playbackSpeed: speed }),
+  setSimulationMode: (mode) => set({ simulationMode: mode }),
+  setCurrentStepIndex: (step) => set({ currentStepIndex: step }),
+  setTotalStepCount: (total) => set({ totalStepCount: total }),
+  setCurrentTimestamp: (ts) => set({ currentTimestamp: ts }),
+  setLeakStepIndices: (steps) => set({ leakStepIndices: steps }),
+  setLatestInference: (inf) => set({ latestInference: inf }),
+  setIsScenarioCatalogOpen: (open) => set({ isScenarioCatalogOpen: open }),
+  setActiveScenarioMetadata: (meta) => set({ activeScenarioMetadata: meta }),
+
+  setIsFaultInjectionPanelOpen: (open) => set({ isFaultInjectionPanelOpen: open }),
+  setActiveFault: (fault) => set({ activeFault: fault }),
+
+  addTelemetryHistoryPoint: (point) =>
+    set((state) => {
+      const idx = state.telemetryHistory.findIndex((p) => p.step === point.step);
+      let updated: TelemetryHistoryPoint[];
+      if (idx >= 0) {
+        updated = [...state.telemetryHistory];
+        updated[idx] = point;
+      } else {
+        updated = [...state.telemetryHistory, point].sort((a, b) => a.step - b.step);
+      }
+      if (updated.length > 120) {
+        updated = updated.slice(updated.length - 120);
+      }
+      return { telemetryHistory: updated };
+    }),
+  setTelemetryHistory: (points) => set({ telemetryHistory: points }),
+  clearTelemetryHistory: () => set({ telemetryHistory: [] }),
+  setIsLiveDvrMode: (active) => set({ isLiveDvrMode: active }),
+  setDvrScrubIndex: (index) => set({ dvrScrubIndex: index }),
+  returnToLive: () => set({ isLiveDvrMode: false, dvrScrubIndex: null, isPlaybackPaused: false }),
+}));
+

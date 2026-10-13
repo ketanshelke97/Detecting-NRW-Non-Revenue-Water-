@@ -1,0 +1,34 @@
+{
+  "name": "Net1 Topology",
+  "nodes": [
+    {"id": "9", "type": "reservoir", "label": "Reservoir 9", "x": 0, "y": 100},
+    {"id": "10", "type": "sensor", "label": "Junction 10", "x": 100, "y": 100},
+    {"id": "11", "type": "sensor", "label": "Junction 11", "x": 200, "y": 100},
+    {"id": "12", "type": "sensor", "label": "Junction 12", "x": 300, "y": 100},
+    {"id": "13", "type": "sensor", "label": "Junction 13", "x": 400, "y": 100},
+    {"id": "2", "type": "tank", "label": "Elevated Tank 2", "x": 300, "y": 0},
+    {"id": "21", "type": "sensor", "label": "Junction 21", "x": 200, "y": 200},
+    {"id": "22", "type": "sensor", "label": "Junction 22", "x": 300, "y": 200},
+    {"id": "23", "type": "sensor", "label": "Junction 23", "x": 400, "y": 200},
+    {"id": "31", "type": "sensor", "label": "Junction 31", "x": 200, "y": 300},
+    {"id": "32", "type": "sensor", "label": "Junction 32", "x": 300, "y": 300},
+    {"id": "33", "type": "sensor", "label": "Junction 33", "x": 400, "y": 300}
+  ],
+  "links": [
+    {"source": "9", "target": "10", "type": "pump", "id": "PUMP-9", "label": "Pump 9"},
+    {"source": "10", "target": "11", "type": "pipe", "id": "PIPE-10", "label": "Pipe 10"},
+    {"source": "11", "target": "12", "type": "pipe", "id": "PIPE-11", "label": "Pipe 11"},
+    {"source": "12", "target": "13", "type": "pipe", "id": "PIPE-12", "label": "Pipe 12"},
+    {"source": "2", "target": "12", "type": "pipe", "id": "PIPE-110", "label": "Pipe 110"},
+    {"source": "11", "target": "21", "type": "pipe", "id": "PIPE-111", "label": "Pipe 111"},
+    {"source": "12", "target": "22", "type": "pipe", "id": "PIPE-112", "label": "Pipe 112"},
+    {"source": "13", "target": "23", "type": "pipe", "id": "PIPE-113", "label": "Pipe 113"},
+    {"source": "21", "target": "22", "type": "pipe", "id": "PIPE-21", "label": "Pipe 21"},
+    {"source": "22", "target": "23", "type": "pipe", "id": "PIPE-22", "label": "Pipe 22"},
+    {"source": "21", "target": "31", "type": "pipe", "id": "PIPE-121", "label": "Pipe 121"},
+    {"source": "22", "target": "32", "type": "pipe", "id": "PIPE-122", "label": "Pipe 122"},
+    {"source": "23", "target": "33", "type": "pipe", "id": "PIPE-23", "label": "Pipe 23"},
+    {"source": "31", "target": "32", "type": "pipe", "id": "PIPE-31", "label": "Pipe 31"},
+    {"source": "32", "target": "33", "type": "pipe", "id": "PIPE-32", "label": "Pipe 32"}
+  ]
+}
