@@ -51,4 +51,6 @@ Thumbs.db
 # Large binary / dataset files exceeding GitHub's 100MB limit
 # (Lightweight v2 models: ~2-15MB each are committed to ensure inference works out-of-the-box)
 backend/models/random_forest_v3_temporal.joblib
+backend/models/*_legacy_backup.joblib
 backend/data/scenarios/test_temporal_features.csv
+

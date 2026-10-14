@@ -1,3 +1,5 @@
+import os
+import csv
 from typing import Dict, Any, List, Optional
 from pydantic import BaseModel
 from fastapi import APIRouter, Query, HTTPException
@@ -73,40 +75,38 @@ def select_scenario(request: SelectScenarioRequest) -> Dict[str, Any]:
 def historical_audit(request: AuditRequest) -> Dict[str, Any]:
     """
     Full-year/custom date range scan for leak start/stop and total loss.
+    Executes pure production Random Forest inference across all 11 sensor channels.
     """
     from app.services.inference import engine
     if not engine.models_loaded:
         engine.load_models()
 
-    scenario_path = os.path.join(settings.DATA_DIR, "scenarios", f"{request.scenario_id}.csv")
-    if not os.path.exists(scenario_path):
-        return {"error": "Scenario not found"}
+    csv_path = scenario_manager.ensure_scenario_csv(request.scenario_id)
+    if not os.path.exists(csv_path):
+        return {"error": "Scenario dataset not found"}
         
     total_loss_liters = 0.0
     total_financial_loss = 0.0
     leak_events = []
     
-    with open(scenario_path, 'r') as f:
+    with open(csv_path, 'r', encoding='utf-8') as f:
         reader = csv.DictReader(f)
         for row in reader:
-            # Extract features (assume columns after timestamp)
-            # The CSV has 10 nodes: node_10, node_11, ...
-            features = []
-            for col in reader.fieldnames:
-                if col != 'timestamp':
-                    features.append(float(row[col]))
-            # Pad to 11 if needed
-            if len(features) == 10:
-                features.append(50.0) # Dummy for node 2
+            # Map columns to native node IDs (e.g. node_9 -> 9, node_2 -> 2)
+            readings = {
+                k.replace('node_', ''): float(v)
+                for k, v in row.items()
+                if k != 'timestamp' and v != ''
+            }
                 
-            result = engine.predict(features)
+            result = engine.predict(readings=readings)
             if result.get("status") == "LEAK_DETECTED":
                 loss_stats = result.get("loss", {})
                 # Assuming each row is 30 mins (0.5 hours)
                 total_loss_liters += loss_stats.get("liters_per_hour", 0) * 0.5
                 total_financial_loss += loss_stats.get("financial_loss_inr_per_hour", 0) * 0.5
                 
-                # Optionally save to DB here (skeleton logic)
+                # Optionally record to SQLite Incident DB
                 from app.core.database import SessionLocal
                 from app.models.incident import Incident
                 from datetime import datetime
@@ -123,7 +123,7 @@ def historical_audit(request: AuditRequest) -> Dict[str, Any]:
                     )
                     db.add(incident)
                     db.commit()
-                except Exception as e:
+                except Exception:
                     db.rollback()
                 finally:
                     db.close()
@@ -132,13 +132,15 @@ def historical_audit(request: AuditRequest) -> Dict[str, Any]:
                     "timestamp": row['timestamp'],
                     "localization": result.get("localization"),
                     "dynamics": result.get("dynamics"),
-                    "diameter_mm": result.get("diameter_mm")
+                    "diameter_mm": result.get("diameter_mm"),
+                    "flow_lph": loss_stats.get("liters_per_hour", 0)
                 })
                 
     return {
         "status": "success", 
-        "total_water_loss_liters": total_loss_liters,
-        "total_financial_loss_inr": total_financial_loss,
+        "total_water_loss_liters": round(total_loss_liters, 2),
+        "total_water_loss_m3": round(total_loss_liters / 1000.0, 3),
+        "total_financial_loss_inr": round(total_financial_loss, 2),
         "leak_event_count": len(leak_events),
         "events": leak_events
     }

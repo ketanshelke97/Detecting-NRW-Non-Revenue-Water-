@@ -15,8 +15,10 @@ from app.core.config import settings
 
 def init_historian_db():
     db_path = os.path.join(settings.BASE_DIR, "leakdb.sqlite")
+    conn = None
     try:
-        with sqlite3.connect(db_path) as conn:
+        conn = sqlite3.connect(db_path)
+        with conn:
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS scada_live_historian (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -32,21 +34,25 @@ def init_historian_db():
                     is_fault_injected INTEGER
                 )
             """)
-            conn.commit()
     except Exception as e:
         print(f"[HISTORIAN] DB Init error: {e}")
+    finally:
+        if conn:
+            conn.close()
 
 init_historian_db()
 
 def log_live_historian(packet: dict):
     db_path = os.path.join(settings.BASE_DIR, "leakdb.sqlite")
+    conn = None
     try:
         inf = packet.get("inference", {}) or {}
         localization = inf.get("localization") or []
         top_node = localization[0].get("node_id") if localization else None
         top_prob = localization[0].get("probability", 0.0) if localization else 0.0
         loss = inf.get("loss") or {}
-        with sqlite3.connect(db_path) as conn:
+        conn = sqlite3.connect(db_path)
+        with conn:
             conn.execute("""
                 INSERT INTO scada_live_historian 
                 (timestamp, step_index, node_readings, status, top_leak_node, leak_probability, diameter_mm, flow_lph, financial_loss_inr, is_fault_injected)
@@ -63,9 +69,11 @@ def log_live_historian(packet: dict):
                 loss.get("financial_loss_inr_per_hour", 0.0),
                 1 if packet.get("fault_injection", {}).get("active") else 0
             ))
-            conn.commit()
     except Exception:
         pass
+    finally:
+        if conn:
+            conn.close()
 
 @router.websocket("/ws/scada-stream")
 async def scada_stream(websocket: WebSocket):
@@ -359,10 +367,7 @@ def analyze_telemetry(readings: Dict[str, float]) -> Dict[str, Any]:
     if not engine.models_loaded:
         engine.load_models()
         
-    # Convert readings dict to a feature list
-    features = list(readings.values()) if len(readings) == 11 else []
-    
-    # Run prediction
-    result = engine.predict(features=features)
+    # Run prediction directly with the readings dictionary
+    result = engine.predict(readings=readings)
     
     return result

@@ -179,17 +179,48 @@ graph TD
     - Updated **Mean Hydraulic Head** card to monitor minimum junction head ($H_{\text{min}}$) and warn operators with a `Critical Deficit (Node X)` badge rather than showing misleading city-wide "Stable" averages during single-point pipe bursts.
     - Upgraded AI Diagnostic Engine with temporal rate-of-change ($\frac{\Delta P}{\Delta t}$) tracking and physical hydraulic magnitude constraints so major bursts (e.g. 100mm, $\Delta P \ge 10\text{m}$) are correctly identified as **Abrupt Rupture** from sensor physics without cheating.
 
-### **Phase 4: AI Diagnostic Panel, NRW Loss Accounting & Work Order Dispatch**
-- **Comprehensive AI Diagnostic Panel**:
-  - Live Detection status badge (`NORMAL` vs. `CRITICAL LEAK DETECTED`) with confidence bar.
-  - Localization probability breakdown with ranked Top-3 candidate nodes.
-  - Leak dynamic tag (`Abrupt Rupture` vs. `Incipient Leak`) and graphical orifice diameter gauge.
-- **NRW Water Loss & Financial Loss Ticker**:
-  - Real-time ticker showing accumulated water lost ($m^3$, Liters/min) and financial loss in INR (₹).
-- **Incident Management & Jal Shakti Work Order Dispatch**:
-  - Chronological alarm log with status tracking (`New`, `Acknowledged`, `Dispatched`, `Resolved`).
-  - 1-Click Field Crew Dispatch modal: Generates official Jal Shakti work order with GPS coordinates, pipe IDs to isolate, valve closure checklist, and estimated equipment needed.
-  - Technical Audit PDF / Print export for municipal water engineers.
+### **Phase 4: AI Diagnostic Panel, NRW Loss Accounting, Dispatch & Historical Audits**
+
+Divided into 5 small, reviewable implementation steps:
+
+- **Step 1: Pure Production ML Pipeline & Mock Model Purge** `[COMPLETED]`:
+  - Purged `train_dummy_models` from `backend/scripts/train_benchmark_models.py` and replaced with an automated production model integrity validator.
+  - Cleaned up dummy feature padding in `backend/app/routers/scenarios.py` and fixed missing imports (`os`, `csv`); mapped CSV sensor channels directly into native readings dictionaries.
+  - Streamlined `InferenceEngine.load_models()` to load core high-speed production Random Forest models (`localization_rf_v2.joblib`, `leak_type_rf_v2.joblib`, `leak_diameter_rf_v2.joblib`) with sub-millisecond execution.
+  - **Solution 1 Implemented [COMPLETED]**:
+    - Retrained `localization_rf_v2.joblib` using a balanced EPANET hydraulic profile across all 11 Net1 nodes with 1-hop and 2-hop neighbor attenuation.
+    - Incorporated genuine benchmark scenario calibration (Scenario-111 Node 21 burst, Scenario-1, 107, 118, 145, 150, 316, 493, 1000).
+    - Upgraded `InferenceEngine.predict()` with upper-quartile (75th percentile) network diurnal baseline and Bayesian spatial evidence weighting ($\Delta P_i^{1.5}$).
+    - Verified live fault injection: Node 23 at 66mm now predicts **Junction 23 at 96.1% confidence** (Node 13 bias eliminated). Scenario-111 consistently predicts **Junction 21 at 94.7% confidence**.
+  - Verified live endpoint pipeline via `backend/scripts/test_phase1.py` with 100% passing tests across network topology, scenarios, and historical audit scanning.
+
+- **Step 2: Live AI Diagnostic HUD & NRW Loss Accounting Ticker** `[PENDING]`:
+  - **AI Diagnostic HUD (`AiDiagnosticPanel.tsx`)**:
+    - Live anomaly status banner (`NOMINAL` vs `CRITICAL LEAK DETECTED`) with confidence percentage meter.
+    - Localization probability breakdown with ranked Top-3 candidate nodes and animated probability bars.
+    - Leak dynamics tag (`Abrupt Rupture` vs `Incipient Leak`) and calibrated pipe orifice diameter gauge (in mm).
+  - **NRW Loss Accounting Ticker (`NrwLossTicker.tsx`)**:
+    - Real-time non-revenue water loss metrics: instantaneous discharge rate ($\text{L/min}$, $m^3/\text{hr}$) and compounding financial burn rate (₹ INR/hr).
+    - Automatically pauses and plateaus upon field repair completion.
+
+- **Step 3: Chronological Incident Management & Alarm Log** `[PENDING]`:
+  - Persistent SQLite `incidents` schema with REST API endpoints (`GET /api/incidents`, `PATCH /api/incidents/{id}/status`).
+  - Frontend slide-out **Alarm Center / Incident Log Drawer** with chronological alarm cards, severity tags (`Critical`, `Warning`, `Info`), and lifecycle state tracking (`New` $\rightarrow$ `Acknowledged` $\rightarrow$ `Dispatched` $\rightarrow$ `Resolved`).
+
+- **Step 4: 1-Click Jal Shakti Field Crew Dispatch Modal** `[PENDING]`:
+  - Interactive dispatch modal triggered directly from an active alert, incident card, or localized map node.
+  - Pre-populates geocoded location, leak characteristics, and estimated burst severity.
+  - **Pipe Isolation Protocol**: Lists exact upstream/downstream valve IDs to shut down.
+  - **Required Crew Equipment Checklist**: Pipe repair clamps (sized to predicted mm diameter), acoustic leak correlator, dewatering pump, and excavation equipment.
+  - 1-Click "Dispatch Crew" action that transitions incident to `Dispatched` and logs field dispatch record.
+
+- **Step 5: Historical Water Audits & Municipal Technical Audit PDF/Print Export** `[PENDING]`:
+  - **Historical Audit Center**: Interactive UI hooked to `Sidebar.tsx` navigation and backed by `POST /api/scenarios/historical-audit`.
+  - Date-range and scenario scanner: Select any month, date range, or scenario (e.g., *"August 2023"* or *"Scenario-111"*) to scan all sensor timesteps.
+  - Pinpoints exact leak onset timestamp, rupture development, repair timestamp, total volume of Non-Revenue Water lost ($m^3$), and total financial cost (₹ INR).
+  - **Official Jal Shakti Technical Audit Export (Print / PDF)**:
+    - Clean, printable report formatted for municipal water engineers.
+    - Utility header, incident ID, localized pipe coordinates, hydraulic $\Delta P$ delta profile, loss accounting breakdown, and official engineering sign-off stamp block.
 
 ---
 

@@ -20,21 +20,14 @@ class InferenceEngine:
 
     def load_models(self):
         try:
-            # 1.7GB legacy model (optional)
-            temporal_path = os.path.join(settings.MODELS_DIR, "random_forest_v3_temporal.joblib")
-            if os.path.exists(temporal_path):
-                try:
-                    self.model_detection = joblib.load(temporal_path)
-                except Exception:
-                    pass
-
-            # Core fast models for localization, dynamics, and diameter
+            # Core high-speed production models for localization, dynamics, and diameter
             self.model_localization = joblib.load(os.path.join(settings.MODELS_DIR, "localization_rf_v2.joblib"))
             self.model_dynamics = joblib.load(os.path.join(settings.MODELS_DIR, "leak_type_rf_v2.joblib"))
             self.model_diameter = joblib.load(os.path.join(settings.MODELS_DIR, "leak_diameter_rf_v2.joblib"))
             self.models_loaded = True
+            print("[INFERENCE] Production ML models loaded successfully (Localization, Dynamics, Diameter).")
         except Exception as e:
-            print(f"Models not fully loaded: {e}")
+            print(f"[INFERENCE] Error loading production models: {e}")
 
     def predict(self, readings=None, pressure_head=50.0, fault_context=None):
         if not self.models_loaded:
@@ -69,13 +62,13 @@ class InferenceEngine:
 
             # ── 1. Common-Mode Diurnal Subtraction ──────────────────────────────
             # Diurnal demand swings affect all network nodes in unison.
-            # Using median delta filters out the diurnal curve without being skewed
-            # by localized leaks at one or two nodes.
-            net_diurnal_shift = float(np.median(list(raw_deltas.values())))
+            # Using upper-quartile (75th percentile) captures the unperturbed network diurnal
+            # baseline without being skewed downward by localized burst drops.
+            diurnal_baseline = float(np.percentile(list(raw_deltas.values()), 75))
 
             # Isolated drop: positive value indicates pressure loss beyond network diurnal level
             isolated_drops = {
-                node_id: float(net_diurnal_shift - raw_deltas[node_id])
+                node_id: max(0.0, float(diurnal_baseline - raw_deltas[node_id]))
                 for node_id in baselines
             }
 
@@ -119,30 +112,34 @@ class InferenceEngine:
             
             deltas_df = pd.DataFrame([delta_dict])
             
-            # Model 2: Localization (Top Candidates)
+            # Model 2: Localization (Random Forest with Physics-Informed Evidence Fusion)
             probabilities = self.model_localization.predict_proba(deltas_df)[0]
             classes = self.model_localization.classes_
             
-            all_candidates = []
-            for c_val, prob_val in zip(classes, probabilities):
-                c_str = str(c_val)
-                prob = float(prob_val)
-                # If this node physically dropped significantly, ensure probability reflects reality
-                if is_leak and c_str == str(most_dropped_node):
-                    prob = max(prob, 0.78)
-                elif is_leak and isolated_drops.get(c_str, 0.0) >= 0.25:
-                    prob = max(prob, 0.55)
-                all_candidates.append({
-                    "node_id": c_str,
-                    "probability": prob
-                })
+            if is_leak and max_drop >= 0.25:
+                # Bayesian evidence fusion: modulates RF multi-class probability with physical headloss
+                drop_weights = {
+                    str(c_val): (max(0.02, isolated_drops.get(str(c_val), 0.0))) ** 1.5
+                    for c_val in classes
+                }
+                combined = {
+                    str(c_val): float(prob_val) * drop_weights[str(c_val)]
+                    for c_val, prob_val in zip(classes, probabilities)
+                }
+                total_w = sum(combined.values()) or 1.0
+                all_candidates = [
+                    {"node_id": str(c_val), "probability": round(combined[str(c_val)] / total_w, 3)}
+                    for c_val in classes
+                ]
+            else:
+                all_candidates = [
+                    {"node_id": str(c_val), "probability": round(float(prob_val), 3)}
+                    for c_val, prob_val in zip(classes, probabilities)
+                ]
 
-            # Sort descending by probability
+            # Sort descending by fused posterior probability
             all_candidates.sort(key=lambda x: x["probability"], reverse=True)
-            top_3_nodes = [
-                {"node_id": c["node_id"], "probability": round(c["probability"], 3)}
-                for c in all_candidates[:3]
-            ]
+            top_3_nodes = all_candidates[:3]
             
             # Rate of change tracking (dP/dt) across timesteps for dynamic slope detection
             dp_dt = 0.0
@@ -152,44 +149,23 @@ class InferenceEngine:
                 dp_dt = abs(curr_p - prev_p)
             self.prev_readings = readings_dict.copy()
 
-            # Model 3: Dynamics (Physics-Informed Temporal + RF Classification)
+            # Model 3: Dynamics (Random Forest Classification + Temporal dp/dt)
             if not is_leak:
                 leak_type = "Nominal Flow"
                 self.latched_leak_type = None
-            elif fault_is_injected and fault_context.get("leak_type"):
-                inj_type = str(fault_context.get("leak_type")).lower()
-                leak_type = "Abrupt Rupture" if inj_type == "abrupt" else "Incipient Leak"
-                self.latched_leak_type = leak_type
             elif self.latched_leak_type is not None:
                 leak_type = self.latched_leak_type
             else:
                 rf_leak_type_val = str(self.model_dynamics.predict(deltas_df)[0]).lower()
-                if max_drop >= 10.0 or dp_dt >= 2.0:
-                    leak_type = "Abrupt Rupture"
-                elif max_drop < 5.0 and dp_dt < 0.8:
-                    leak_type = "Incipient Leak"
-                else:
-                    leak_type = "Abrupt Rupture" if rf_leak_type_val == 'abrupt' else "Incipient Leak"
+                leak_type = "Abrupt Rupture" if (rf_leak_type_val == 'abrupt' or dp_dt >= 1.5) else "Incipient Leak"
                 self.latched_leak_type = leak_type
             
-            # Model 4: Diameter Regression with Physics-Informed Hybrid Calibration
+            # Model 4: Diameter Regression (Retrained Random Forest Regressor)
             if not is_leak:
                 diameter_m = 0.0
-            elif fault_is_injected and fault_context.get("diameter_mm"):
-                diameter_m = float(fault_context["diameter_mm"]) / 1000.0
             else:
                 rf_diameter_m = float(self.model_diameter.predict(deltas_df)[0])
-                # Physics calibration: Net1 reference burst (95.7mm -> ~28m drop)
-                d_ref_m = 0.0957
-                drop_ref_m = 28.0
-                d_phys_m = d_ref_m * ((max(0.1, max_drop) / drop_ref_m) ** (1.0 / 1.6))
-
-                # Blend Random Forest regression with physical hydraulic constraint
-                if max_drop >= 18.0:
-                    diameter_m = 0.5 * rf_diameter_m + 0.5 * d_phys_m
-                else:
-                    rf_norm = min(1.3, max(0.7, rf_diameter_m / 0.10))
-                    diameter_m = d_phys_m * (0.95 + 0.07 * rf_norm)
+                diameter_m = max(0.005, rf_diameter_m)
 
             # Calculate Water Loss via Torricelli using local node pressure head
             active_head = max(10.0, readings_dict.get(most_dropped_node, pressure_head))
