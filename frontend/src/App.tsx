@@ -11,6 +11,8 @@ import { SimulationToolbar } from './components/scada/SimulationToolbar';
 import { ScenarioCatalogDrawer } from './components/scada/ScenarioCatalogDrawer';
 import { FaultInjectionPanel } from './components/scada/FaultInjectionPanel';
 import { TelemetryDeck } from './components/scada/TelemetryDeck';
+import { AiDiagnosticPanel } from './components/scada/AiDiagnosticPanel';
+import { NrwLossTicker } from './components/scada/NrwLossTicker';
 
 function App() {
   const { data: topology, isLoading, error } = useNetworkTopology();
@@ -119,6 +121,19 @@ function App() {
 
       {/* Simulation Control Toolbar (Phase 3 Step 1) */}
       <SimulationToolbar />
+
+      {/* Live AI Diagnostic HUD & NRW Loss Accounting Ticker (Phase 4 Step 2) */}
+      <div 
+        id="ai-diagnostics-section" 
+        className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-6 items-stretch scroll-mt-6 transition-all duration-500 rounded-xl"
+      >
+        <div className="lg:col-span-7 flex flex-col">
+          <AiDiagnosticPanel />
+        </div>
+        <div className="lg:col-span-5 flex flex-col">
+          <NrwLossTicker />
+        </div>
+      </div>
 
       {/* Main Net1 Digital Twin Map Canvas */}
       <Card className="h-[620px] flex flex-col shadow-2xl border-scada-border/80">

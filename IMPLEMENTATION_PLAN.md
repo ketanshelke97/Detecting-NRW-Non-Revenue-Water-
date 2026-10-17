@@ -194,14 +194,20 @@ Divided into 5 small, reviewable implementation steps:
     - Verified live fault injection: Node 23 at 66mm now predicts **Junction 23 at 96.1% confidence** (Node 13 bias eliminated). Scenario-111 consistently predicts **Junction 21 at 94.7% confidence**.
   - Verified live endpoint pipeline via `backend/scripts/test_phase1.py` with 100% passing tests across network topology, scenarios, and historical audit scanning.
 
-- **Step 2: Live AI Diagnostic HUD & NRW Loss Accounting Ticker** `[PENDING]`:
+- **Step 2: Live AI Diagnostic HUD & NRW Loss Accounting Ticker** `[COMPLETED]`:
   - **AI Diagnostic HUD (`AiDiagnosticPanel.tsx`)**:
-    - Live anomaly status banner (`NOMINAL` vs `CRITICAL LEAK DETECTED`) with confidence percentage meter.
-    - Localization probability breakdown with ranked Top-3 candidate nodes and animated probability bars.
-    - Leak dynamics tag (`Abrupt Rupture` vs `Incipient Leak`) and calibrated pipe orifice diameter gauge (in mm).
+    - Live anomaly status banner (`NOMINAL` vs `CRITICAL LEAK DETECTED`) with confidence percentage meter and pulsing alert badge.
+    - Localization probability breakdown with ranked Top-3 candidate nodes, probability bars, and direct click-to-spotlight on Digital Twin graph.
+    - Leak dynamics tag (`Abrupt Rupture` vs `Incipient Leak` vs `Nominal Flow`) with transient slope indicators.
+    - Calibrated pipe orifice diameter gauge (in mm) with pipe damage classification tags (`Pin-Hole`, `Medium Split`, `Major Mainline Rupture`).
   - **NRW Loss Accounting Ticker (`NrwLossTicker.tsx`)**:
-    - Real-time non-revenue water loss metrics: instantaneous discharge rate ($\text{L/min}$, $m^3/\text{hr}$) and compounding financial burn rate (₹ INR/hr).
-    - Automatically pauses and plateaus upon field repair completion.
+    - Real-time non-revenue water loss metrics: instantaneous discharge rate in both $\text{L/min}$ and $m^3/\text{hr}$ using Torricelli physical efflux.
+    - Compounding financial burn rate in ₹ INR/hr (CPHEEO municipal tariff standard @ ₹25/$m^3$).
+    - Cumulative physical volume lost ($m^3$ and Liters) and total financial bill.
+    - Automatic pause and plateau state detection: freezes accumulated loss figures and displays emerald `LOSS PLATEAUED • REPAIRED` upon field repair.
+  - **App Integration**:
+    - Positioned as a prominent 12-column SCADA Command Grid (7-col HUD + 5-col Loss Ticker) between `SimulationToolbar` and `DigitalTwinMap`.
+    - Fully validated with `npm run build` (0 TypeScript errors) and backend endpoint pipeline tests.
 
 - **Step 3: Chronological Incident Management & Alarm Log** `[PENDING]`:
   - Persistent SQLite `incidents` schema with REST API endpoints (`GET /api/incidents`, `PATCH /api/incidents/{id}/status`).

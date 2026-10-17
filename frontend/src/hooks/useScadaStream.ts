@@ -58,6 +58,7 @@ function connectSharedWebSocket() {
         if (data.scenario_id !== undefined) store.setActiveScenarioId(data.scenario_id);
         if (data.total_steps !== undefined) store.setTotalStepCount(data.total_steps);
         if (data.leak_steps) store.setLeakStepIndices(data.leak_steps);
+        if (data.repair_step !== undefined) store.setRepairStep(data.repair_step);
         if (data.is_paused !== undefined && !store.isLiveDvrMode) store.setPlaybackPaused(data.is_paused);
 
         // Build synchronized time-series history point (Phase 3 Step 4)

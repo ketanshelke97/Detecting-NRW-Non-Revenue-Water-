@@ -8,7 +8,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <Header />
       <div className="flex-1 flex overflow-hidden">
         <Sidebar />
-        <main className="flex-1 relative overflow-auto p-6">
+        <main id="scada-main-container" className="flex-1 relative overflow-auto p-6 scroll-smooth">
           {children}
         </main>
       </div>

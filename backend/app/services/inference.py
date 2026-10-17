@@ -173,9 +173,22 @@ class InferenceEngine:
             liters_per_hour = flow_to_liters_per_hour(flow_m3_s) if is_leak else 0.0
             financial_loss = calculate_financial_loss(liters_per_hour) if is_leak else 0.0
             
+            # Dynamic Nominal Health Confidence (Option A: Physical Noise Margin)
+            # Under normal operations, calculates the headroom of sensor drops relative to the 0.35m alarm trigger.
+            # As sensor jitter fluctuates (0.02m - 0.15m), confidence breathes naturally between 96% and 99%.
+            margin_ratio = min(1.0, max(0.0, max_drop / 0.35))
+            nominal_confidence = round(max(95.0, min(99.4, 99.5 - (margin_ratio * 8.0))), 1)
+
+            confidence_val = (
+                round(float(top_3_nodes[0]["probability"] * 100), 1)
+                if (is_leak == 1 and top_3_nodes)
+                else nominal_confidence
+            )
+
             return {
                 "status": "LEAK_DETECTED" if is_leak == 1 else "NORMAL",
-                "localization": top_3_nodes,
+                "confidence": confidence_val,
+                "localization": top_3_nodes if is_leak == 1 else [],
                 "dynamics": leak_type if is_leak else "Nominal Flow",
                 "diameter_mm": round(diameter_m * 1000, 1),
                 "loss": {

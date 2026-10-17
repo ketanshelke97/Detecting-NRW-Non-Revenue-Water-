@@ -1,16 +1,49 @@
 
+import { useState } from 'react';
 import { Network, Database, Settings, ShieldAlert, BarChart3 } from 'lucide-react';
 import { useScadaStore } from '../../store/scadaStore';
 
 export function Sidebar() {
   const isScenarioCatalogOpen = useScadaStore((state) => state.isScenarioCatalogOpen);
   const setIsScenarioCatalogOpen = useScadaStore((state) => state.setIsScenarioCatalogOpen);
+  const [activeTab, setActiveTab] = useState<'twin' | 'diagnostics' | 'catalog'>('twin');
+
+  const handleDigitalTwinClick = () => {
+    setActiveTab('twin');
+    setIsScenarioCatalogOpen(false);
+    const mainContainer = document.getElementById('scada-main-container');
+    if (mainContainer) {
+      mainContainer.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  const handleDiagnosticsClick = () => {
+    setActiveTab('diagnostics');
+    setIsScenarioCatalogOpen(false);
+    const el = document.getElementById('ai-diagnostics-section');
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.classList.add('ring-2', 'ring-cyan-500', 'shadow-[0_0_35px_rgba(14,165,233,0.35)]');
+      setTimeout(() => {
+        el.classList.remove('ring-2', 'ring-cyan-500', 'shadow-[0_0_35px_rgba(14,165,233,0.35)]');
+      }, 1800);
+    }
+  };
+
+  const handleCatalogClick = () => {
+    setActiveTab('catalog');
+    setIsScenarioCatalogOpen(true);
+  };
+
+  const isTwinActive = !isScenarioCatalogOpen && activeTab === 'twin';
+  const isDiagnosticsActive = !isScenarioCatalogOpen && activeTab === 'diagnostics';
+  const isCatalogActive = isScenarioCatalogOpen;
 
   const navItems = [
-    { icon: Network, label: 'Digital Twin', active: !isScenarioCatalogOpen, onClick: () => setIsScenarioCatalogOpen(false) },
-    { icon: ShieldAlert, label: 'Diagnostics', active: false, onClick: () => {} },
+    { icon: Network, label: 'Digital Twin', active: isTwinActive, onClick: handleDigitalTwinClick },
+    { icon: ShieldAlert, label: 'Diagnostics', active: isDiagnosticsActive, onClick: handleDiagnosticsClick },
     { icon: BarChart3, label: 'Historical Audit', active: false, onClick: () => {} },
-    { icon: Database, label: 'Scenario Catalog', active: isScenarioCatalogOpen, onClick: () => setIsScenarioCatalogOpen(true) },
+    { icon: Database, label: 'Scenario Catalog', active: isCatalogActive, onClick: handleCatalogClick },
     { icon: Settings, label: 'Settings', active: false, onClick: () => {} },
   ];
 

@@ -8,6 +8,7 @@ export interface NodeTelemetry {
 
 export interface InferenceData {
   status: string;
+  confidence?: number;
   localization?: Array<{ node_id: string; probability: number }>;
   dynamics?: string;
   diameter_mm?: number;
@@ -51,6 +52,7 @@ interface ScadaState {
   totalStepCount: number;
   currentTimestamp: string;
   leakStepIndices: number[];
+  repairStep: number | null;
   latestInference: InferenceData | null;
   
   // Phase 3 Step 2 Scenario Catalog State
@@ -83,6 +85,7 @@ interface ScadaState {
   setTotalStepCount: (total: number) => void;
   setCurrentTimestamp: (ts: string) => void;
   setLeakStepIndices: (steps: number[]) => void;
+  setRepairStep: (step: number | null) => void;
   setLatestInference: (inf: InferenceData | null) => void;
   setIsScenarioCatalogOpen: (open: boolean) => void;
   setActiveScenarioMetadata: (meta: any) => void;
@@ -116,6 +119,7 @@ export const useScadaStore = create<ScadaState>((set) => ({
   totalStepCount: 120,
   currentTimestamp: new Date().toLocaleTimeString(),
   leakStepIndices: [],
+  repairStep: null,
   latestInference: null,
   
   isScenarioCatalogOpen: false,
@@ -150,6 +154,7 @@ export const useScadaStore = create<ScadaState>((set) => ({
   setTotalStepCount: (total) => set({ totalStepCount: total }),
   setCurrentTimestamp: (ts) => set({ currentTimestamp: ts }),
   setLeakStepIndices: (steps) => set({ leakStepIndices: steps }),
+  setRepairStep: (step) => set({ repairStep: step }),
   setLatestInference: (inf) => set({ latestInference: inf }),
   setIsScenarioCatalogOpen: (open) => set({ isScenarioCatalogOpen: open }),
   setActiveScenarioMetadata: (meta) => set({ activeScenarioMetadata: meta }),
