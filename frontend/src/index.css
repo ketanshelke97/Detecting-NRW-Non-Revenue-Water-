@@ -7,3 +7,38 @@
     @apply bg-scada-bg text-slate-200;
   }
 }
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 12mm 15mm;
+  }
+
+  body {
+    background-color: #ffffff !important;
+    color: #0f172a !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Hide app navigation and modal chrome */
+  aside, 
+  nav, 
+  header, 
+  button, 
+  .print\:hidden {
+    display: none !important;
+  }
+
+  /* Expand certificate card for crisp paper printing */
+  #jal-shakti-audit-certificate {
+    box-shadow: none !important;
+    border: 2px solid #1e293b !important;
+    margin: 0 auto !important;
+    max-width: 100% !important;
+    width: 100% !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
+    page-break-inside: avoid;
+  }
+}

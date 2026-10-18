@@ -8,6 +8,8 @@ export function Sidebar() {
   const isIncidentDrawerOpen = useScadaStore((state) => state.isIncidentDrawerOpen);
   const setIsIncidentDrawerOpen = useScadaStore((state) => state.setIsIncidentDrawerOpen);
   const activeIncidentCount = useScadaStore((state) => state.activeIncidentCount);
+  const isAuditModalOpen = useScadaStore((state) => state.isAuditModalOpen);
+  const openAuditModal = useScadaStore((state) => state.openAuditModal);
 
   const [activeTab, setActiveTab] = useState<'twin' | 'diagnostics'>('twin');
 
@@ -45,10 +47,17 @@ export function Sidebar() {
     setIsIncidentDrawerOpen(true);
   };
 
-  const isTwinActive = !isScenarioCatalogOpen && !isIncidentDrawerOpen && activeTab === 'twin';
-  const isDiagnosticsActive = !isScenarioCatalogOpen && !isIncidentDrawerOpen && activeTab === 'diagnostics';
+  const handleAuditClick = () => {
+    setIsScenarioCatalogOpen(false);
+    setIsIncidentDrawerOpen(false);
+    openAuditModal();
+  };
+
+  const isTwinActive = !isScenarioCatalogOpen && !isIncidentDrawerOpen && !isAuditModalOpen && activeTab === 'twin';
+  const isDiagnosticsActive = !isScenarioCatalogOpen && !isIncidentDrawerOpen && !isAuditModalOpen && activeTab === 'diagnostics';
   const isCatalogActive = isScenarioCatalogOpen;
   const isAlarmsActive = isIncidentDrawerOpen;
+  const isAuditActive = isAuditModalOpen;
 
   const navItems = [
     { icon: Network, label: 'Digital Twin', active: isTwinActive, onClick: handleDigitalTwinClick },
@@ -60,7 +69,7 @@ export function Sidebar() {
       badge: activeIncidentCount > 0 ? activeIncidentCount : undefined,
       onClick: handleAlarmCenterClick 
     },
-    { icon: BarChart3, label: 'Historical Audit', active: false, onClick: () => {} },
+    { icon: BarChart3, label: 'Historical Audit', active: isAuditActive, onClick: handleAuditClick },
     { icon: Database, label: 'Scenario Catalog', active: isCatalogActive, onClick: handleCatalogClick },
     { icon: Settings, label: 'Settings', active: false, onClick: () => {} },
   ];

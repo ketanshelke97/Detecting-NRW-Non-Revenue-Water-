@@ -16,6 +16,7 @@ import { AiDiagnosticPanel } from './components/scada/AiDiagnosticPanel';
 import { NrwLossTicker } from './components/scada/NrwLossTicker';
 import { IncidentLogDrawer } from './components/scada/IncidentLogDrawer';
 import { FieldDispatchModal } from './components/scada/FieldDispatchModal';
+import { HistoricalAuditModal } from './components/scada/HistoricalAuditModal';
 import { incidentService } from './services/incidentService';
 import { executeFieldRepair } from './services/fieldDispatchService';
 
@@ -218,6 +219,7 @@ function App() {
       <FaultInjectionPanel />
       <IncidentLogDrawer />
       <FieldDispatchModal />
+      <HistoricalAuditModal />
     </Layout>
   );
 }

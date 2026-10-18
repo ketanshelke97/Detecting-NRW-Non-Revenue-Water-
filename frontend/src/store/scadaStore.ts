@@ -81,6 +81,10 @@ interface ScadaState {
   isDispatchModalOpen: boolean;
   dispatchIncidentTarget: any | null;
 
+  // Phase 4 Step 5: Historical Water Audit Center & Compliance Certificate
+  isAuditModalOpen: boolean;
+  selectedAuditIncidentId: number | null;
+
   setSelectedNodeId: (id: string | null) => void;
   setActiveScenarioId: (id: string | null) => void;
   setLiveStreamActive: (active: boolean) => void;
@@ -126,6 +130,11 @@ interface ScadaState {
   setIsDispatchModalOpen: (open: boolean) => void;
   setDispatchIncidentTarget: (incident: any | null) => void;
   openDispatchModal: (incident?: any) => void;
+
+  // Historical Water Audit actions
+  setIsAuditModalOpen: (open: boolean) => void;
+  setSelectedAuditIncidentId: (id: number | null) => void;
+  openAuditModal: (incidentId?: number) => void;
 
   // Active Field Dispatches & Lifecycle
   activeDispatches: ActiveDispatch[];
@@ -197,6 +206,10 @@ export const useScadaStore = create<ScadaState>((set) => ({
   isDispatchModalOpen: false,
   dispatchIncidentTarget: null,
   activeDispatches: [],
+
+  // Phase 4 Step 5 defaults
+  isAuditModalOpen: false,
+  selectedAuditIncidentId: null,
   
   setSelectedNodeId: (id) => set({ selectedNodeId: id }),
   setActiveScenarioId: (id) => set({ activeScenarioId: id }),
@@ -260,6 +273,14 @@ export const useScadaStore = create<ScadaState>((set) => ({
   openDispatchModal: (incident) => set({ 
     dispatchIncidentTarget: incident || null, 
     isDispatchModalOpen: true 
+  }),
+
+  // Historical Water Audit actions
+  setIsAuditModalOpen: (open) => set({ isAuditModalOpen: open }),
+  setSelectedAuditIncidentId: (id) => set({ selectedAuditIncidentId: id }),
+  openAuditModal: (incidentId) => set({ 
+    selectedAuditIncidentId: incidentId ?? null, 
+    isAuditModalOpen: true 
   }),
 
   // Active Field Dispatches & Lifecycle

@@ -16,7 +16,8 @@ import {
   IndianRupee,
   Truck,
   HardHat,
-  Wrench
+  Wrench,
+  FileText
 } from 'lucide-react';
 import { useScadaStore } from '../../store/scadaStore';
 import { incidentService, type IncidentItem } from '../../services/incidentService';
@@ -33,6 +34,7 @@ export function IncidentLogDrawer() {
   const latestInference = useScadaStore((state) => state.latestInference);
   const nodeData = useScadaStore((state) => state.nodeData);
   const openDispatchModal = useScadaStore((state) => state.openDispatchModal);
+  const openAuditModal = useScadaStore((state) => state.openAuditModal);
   const activeDispatches = useScadaStore((state) => state.activeDispatches);
 
   // Filter & Search State
@@ -471,13 +473,24 @@ export function IncidentLogDrawer() {
 
                   {/* Action Buttons Toolbar */}
                   <div className="flex items-center justify-between pt-2 border-t border-scada-border/40">
-                    <button
-                      onClick={() => handleSpotlight(incident.node_id)}
-                      className="text-xs text-slate-400 hover:text-scada-accent flex items-center space-x-1 font-medium transition-colors"
-                    >
-                      <MapPin className="w-3.5 h-3.5" />
-                      <span>Focus on Map</span>
-                    </button>
+                    <div className="flex items-center space-x-3">
+                      <button
+                        onClick={() => handleSpotlight(incident.node_id)}
+                        className="text-xs text-slate-400 hover:text-scada-accent flex items-center space-x-1 font-medium transition-colors"
+                      >
+                        <MapPin className="w-3.5 h-3.5" />
+                        <span>Focus on Map</span>
+                      </button>
+
+                      <button
+                        onClick={() => openAuditModal(incident.id)}
+                        className="text-xs text-cyan-400 hover:text-cyan-300 flex items-center space-x-1 font-medium transition-colors"
+                        title="View Official Jal Shakti Water Balance & Audit Certificate"
+                      >
+                        <FileText className="w-3.5 h-3.5" />
+                        <span>Audit Certificate</span>
+                      </button>
+                    </div>
 
                     <div className="flex items-center space-x-2">
                       {isNew && (
