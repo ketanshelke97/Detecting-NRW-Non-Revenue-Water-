@@ -219,6 +219,10 @@ Divided into 5 small, reviewable implementation steps:
       - **Running Average Orifice Diameter**: Instead of latching the initial onset transient (e.g. 33.7 mm), tracks running cumulative diameter stats across all timesteps ($\bar{d}_N = \frac{1}{N}\sum d_i$) so the stored diameter converges to the true ML model average (e.g. 133.4 mm in Scenario-150).
       - **0.5-hr Timestep Volume & Cost Synchronization**: Aligned the incremental accumulation with the physical 30-minute ($0.5\text{ hr}$) EPANET/SCADA simulation timestep (`dt_hours = 0.5`), resolving the 1,800× scaling mismatch and ensuring 100% exact numerical match with the NRW Loss Accounting Ticker and Cumulative Loss Chart.
       - **Timeline Scrub & Seek De-duplication**: Guarded step accumulation with `is_step_advanced` check and cleared latch state upon manual timeline seeking, playback reset, mode changes, or scenario loading.
+      - **Benchmark Single-Incident Latching & Spatial Stabilization**: Binds each scenario run to exactly ONE incident ticket (`active_scenario_incident_id`). Even when spatial pressure transients fluctuate localization between adjacent nodes (e.g. Node 21 $\leftrightarrow$ Node 22), the system updates the same canonical ticket without producing duplicate copies.
+      - **Automatic Physical Repair Resolution**: Automatically marks the scenario incident as `"Resolved"` in SQLite with a completion timestamp as soon as the simulated pipe repair is reached and pressures normalize.
+      - **Clean Step 119 Playback Termination**: Clamps scenario playback at the final step, pausing the stream cleanly rather than infinitely wrapping around in phantom loops.
+      - **Direct Crew Dispatch De-duplication**: Dispatches initiated from the AI Diagnostic HUD or Node Drawer update the existing active incident on that junction rather than inserting a duplicate record.
   - **Frontend Alarm Center & Incident Log Drawer (`IncidentLogDrawer.tsx`)**:
     - Slide-out glassmorphism drawer with operational status counters (Total, Active Alerts, Critical, Resolved).
     - Multi-tab filters (`All`, `Active / New`, `Acknowledged`, `Resolved`), severity dropdown, and source origin filter (`All Sources`, `Live SCADA`, `Historical Benchmarks`).
@@ -227,14 +231,15 @@ Divided into 5 small, reviewable implementation steps:
     - Real-time financial & volume metrics formatted with Indian numeric grouping (`en-IN`, e.g. `18,463.6 m³` and `₹4,61,589`).
     - **Live Auto-Sync Polling**: Automatically refreshes incident records every 2 seconds when drawer is open during simulation streaming.
     - **Hydraulic Normalization Safety Guard**: Prevents operators from resolving incidents while an active pressure deficit or injected fault is physically persisting at the junction.
-    - Direct 1-click operator workflow actions (`Acknowledge Alarm`, `Mark Resolved`, `Clear Demo Alarms`).
+    - Direct 1-click operator workflow actions (`Acknowledge Alarm`, `Mark Resolved`, `Clear All Records from Database`).
+    - **Full Database Purge ("Clear All Records from Database")**: Replaced demo alarm clearing with a persistent database purge button that deletes all records from `leakdb.sqlite`, resets the SQLite autoincrement sequence so incident IDs restart from 1, and clears active SCADA latches.
   - **Header & Sidebar App Integration**:
     - Top header trigger badge with live alarm count counter and animated pulsing beacon.
     - Sidebar "Alarm Center" navigation item with unread badge counter.
     - Clickable "Active Leaks" KPI metric card linking straight to the Alarm Center.
   - **Verification**:
     - Validated with `npm run build` (0 TypeScript errors) and automated backend API verification suite [`backend/scripts/test_incidents_api.py`](file:///c:/Users/Ketan%20suresh%20shelke/NRW/Detecting-NRW-Non-Revenue-Water-/backend/scripts/test_incidents_api.py) (100% passing).
-    - End-to-end verified using EPANET Scenario-150: confirmed running average diameter (~133.4 mm) and synchronized volume/cost matching between Alarm Center and NRW Loss Ticker.
+    - End-to-end verified with live fault injections and EPANET benchmark scenarios (Scenario-111, Scenario-107, Scenario-150): zero duplicates, exact numerical sync with AI Diagnostic HUD and NRW Loss Ticker, and clean auto-resolution upon repair.
 
 - **Step 4: 1-Click Jal Shakti Field Crew Dispatch Modal** `[COMPLETED]`:
   - **Interactive Glassmorphic Dispatch Modal (`FieldDispatchModal.tsx`)**:
@@ -301,6 +306,25 @@ Divided into 5 small, reviewable implementation steps:
     - Integrated `@media print` stylesheets in `frontend/src/index.css` formatting the certificate to standard A4 portrait specifications with white paper background, crisp borders, and hidden UI navigation controls.
   - **Verification**:
     - Verified with `npm run build` (0 TypeScript / JSX errors, compiled in 4.93s).
+
+- **Step 6: Real-World Time Scale Synchronization & Hydraulic Multi-Rate Calibration (Option 2)** `[COMPLETED]`:
+  - **Two-Speed Architecture Calibration (Option 2 Approved)**:
+    - **Scenario Lab (Macro Simulation)**: Each step represents 30 minutes ($0.5\text{ hr}$) of simulated hydraulic time for EPANET benchmark datasets (Scenario-111, Scenario-118, etc.).
+    - **Live SCADA Stream (Micro Real-Time)**: Each step represents 1 real second ($1/3600\text{ hr}$) for IoT transient pressure transducers.
+  - **Backend Timezone & Database Connection Leak Fix**:
+    - Eliminated `ResourceWarning: unclosed database in <sqlite3.Connection object>` in [`backend/app/routers/telemetry.py`](file:///c:/Users/Ketan%20suresh%20shelke/NRW/Detecting-NRW-Non-Revenue-Water-/backend/app/routers/telemetry.py) by enclosing all `sqlite3.connect` operations within explicit `finally: conn.close()` cleanup blocks.
+    - Standardized all lifecycle timestamps across [`backend/app/routers/incidents.py`](file:///c:/Users/Ketan%20suresh%20shelke/NRW/Detecting-NRW-Non-Revenue-Water-/backend/app/routers/incidents.py) and [`backend/app/models/incident.py`](file:///c:/Users/Ketan%20suresh%20shelke/NRW/Detecting-NRW-Non-Revenue-Water-/backend/app/models/incident.py) from deprecated `datetime.utcnow()` to unified local time `datetime.now()` (UTC+05:30 IST), preventing the 5.5-hour negative time inversion where resolution times preceded onset times.
+    - Bound benchmark scenario dispatches to simulation epoch boundaries so historical scenarios remain chronologically coherent.
+  - **Frontend Multi-Rate Ticker & Chart Synchronization (`useScadaStream.ts`)**:
+    - Updated `stepLossM3` accumulation in [`frontend/src/hooks/useScadaStream.ts`](file:///c:/Users/Ketan%20suresh%20shelke/NRW/Detecting-NRW-Non-Revenue-Water-/frontend/src/hooks/useScadaStream.ts) to dynamically use $dt = 1/3600\text{ hr}$ during Live SCADA streaming and $dt = 0.5\text{ hr}$ during Scenario Lab playback, completely eliminating the $1,800\times$ volume overestimation bug.
+    - Bound `cumulativeLossM3` directly to verified backend database volume (`data.active_incident.total_volume_lost_m3`), establishing a single source of truth across the **NRW Loss Accounting Ticker**, **Cumulative Loss Chart**, **Alarm Center Cards**, and **Technical Water Audit Center**.
+  - **Human-Understandable Technical Water Audit Center Enhancements (`HistoricalAuditModal.tsx`)**:
+    - Replaced raw cryptic duration strings with human-readable formatting (`X hrs Y mins` and `M mins S s`).
+    - Added automatic UTC/IST offset compensation and physical duration fallbacks (`duration = volumeLost / effluxRate`).
+    - Streamlined Section 2 & Section 3 labels to read clearly for municipal auditors, showing realistic water conservation ($>99\%$ loss prevented vs 48-hour manual survey latency).
+  - **Verification**:
+    - Verified with `npm run build` (0 TypeScript / JSX errors).
+    - Verified full numerical consistency between Live SCADA, NRW Ticker, graphs, alarm cards, and audit certificates.
 
 ---
 

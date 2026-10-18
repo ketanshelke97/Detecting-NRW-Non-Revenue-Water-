@@ -24,6 +24,7 @@ export const AiDiagnosticPanel: React.FC = () => {
   const activeFault = useScadaStore((state) => state.activeFault);
   const openDispatchModal = useScadaStore((state) => state.openDispatchModal);
   const activeDispatches = useScadaStore((state) => state.activeDispatches);
+  const activeLatchedIncident = useScadaStore((state) => state.activeLatchedIncident);
 
   const isLeak = latestInference?.status === 'LEAK_DETECTED';
   const localization = isLeak ? (latestInference?.localization || []) : [];
@@ -369,9 +370,18 @@ export const AiDiagnosticPanel: React.FC = () => {
                 );
               }
 
+              const matchingIncidentId = String(activeLatchedIncident?.node_id) === String(targetNode) 
+                ? activeLatchedIncident?.id 
+                : undefined;
+              const matchingIncidentCode = String(activeLatchedIncident?.node_id) === String(targetNode) 
+                ? activeLatchedIncident?.incident_code 
+                : undefined;
+
               return (
                 <button
                   onClick={() => openDispatchModal({
+                    id: matchingIncidentId,
+                    incident_code: matchingIncidentCode,
                     node_id: targetNode,
                     leak_type: dynamics,
                     diameter_mm: diameterMm,

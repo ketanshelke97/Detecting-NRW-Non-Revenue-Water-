@@ -7,7 +7,7 @@ class Incident(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     incident_code = Column(String, index=True, nullable=True) # e.g. INC-2026-0001
-    timestamp = Column(DateTime, default=datetime.utcnow)
+    timestamp = Column(DateTime, default=datetime.now)
     node_id = Column(String, index=True)
     leak_type = Column(String) # Abrupt Rupture, Incipient Leak, Medium Split
     diameter_mm = Column(Float)
@@ -50,7 +50,7 @@ class Incident(Base):
         return {
             "id": self.id,
             "incident_code": code,
-            "timestamp": self.timestamp.isoformat() if self.timestamp else datetime.utcnow().isoformat(),
+            "timestamp": self.timestamp.isoformat() if self.timestamp else datetime.now().isoformat(),
             "node_id": str(self.node_id),
             "leak_type": self.leak_type or "Abrupt Rupture",
             "diameter_mm": round(self.diameter_mm or 0.0, 1),

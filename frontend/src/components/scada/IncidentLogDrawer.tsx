@@ -36,6 +36,8 @@ export function IncidentLogDrawer() {
   const openDispatchModal = useScadaStore((state) => state.openDispatchModal);
   const openAuditModal = useScadaStore((state) => state.openAuditModal);
   const activeDispatches = useScadaStore((state) => state.activeDispatches);
+  const setActiveLatchedIncident = useScadaStore((state) => state.setActiveLatchedIncident);
+  const triggerIncidentRefresh = useScadaStore((state) => state.triggerIncidentRefresh);
 
   // Filter & Search State
   const [searchQuery, setSearchQuery] = useState('');
@@ -47,6 +49,7 @@ export function IncidentLogDrawer() {
   const [incidents, setIncidents] = useState<IncidentItem[]>([]);
   const [stats, setStats] = useState({ total: 0, active: 0, critical: 0, resolved: 0 });
   const [isLoading, setIsLoading] = useState(false);
+  const [isClearing, setIsClearing] = useState(false);
   const [actionInProgressId, setActionInProgressId] = useState<number | null>(null);
 
   const loadIncidents = useCallback(async () => {
@@ -148,13 +151,23 @@ export function IncidentLogDrawer() {
     }
   };
 
-  const handleClearDemoAlarms = async () => {
-    if (!window.confirm('Are you sure you want to clear all demo alarm records?')) return;
+  const handleClearDatabaseIncidents = async () => {
+    const confirmMsg = 'Are you sure you want to permanently delete ALL incident and alarm records from the database?\n\nThis will completely purge the incident ledger and water audit history from the SQLite database.';
+    if (!window.confirm(confirmMsg)) return;
+
+    setIsClearing(true);
     try {
       await incidentService.clearAllIncidents();
+      setActiveIncidentCount(0);
+      setCriticalIncidentCount(0);
+      setActiveLatchedIncident(null);
+      triggerIncidentRefresh();
       await loadIncidents();
     } catch (err) {
-      console.error('[INCIDENTS] Clear error:', err);
+      console.error('[INCIDENTS] Clear database error:', err);
+      alert('Failed to clear incident records from database. Please check backend connection.');
+    } finally {
+      setIsClearing(false);
     }
   };
 
@@ -596,16 +609,17 @@ export function IncidentLogDrawer() {
         <div className="p-4 border-t border-scada-border/60 bg-scada-bg/60 flex items-center justify-between shrink-0 text-xs text-slate-400">
           <div className="flex items-center space-x-2">
             <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
-            <span>Jal Shakti SCADA Historian • Auto-Latch Active</span>
+            <span>Jal Shakti SCADA Historian • SQLite Persistent</span>
           </div>
 
           <button
-            onClick={handleClearDemoAlarms}
-            className="text-xs text-red-400/80 hover:text-red-300 hover:underline flex items-center space-x-1 transition-all"
-            title="Clear all demo/test incident entries"
+            onClick={handleClearDatabaseIncidents}
+            disabled={isClearing || stats.total === 0}
+            className="px-3 py-1.5 rounded-lg bg-red-500/15 hover:bg-red-500/25 border border-red-500/30 text-red-400 hover:text-red-300 font-semibold text-xs flex items-center space-x-1.5 transition-all shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
+            title="Permanently purge all incident and alarm records from the SQLite database"
           >
-            <Trash2 className="w-3.5 h-3.5" />
-            <span>Clear Demo Alarms</span>
+            <Trash2 className={`w-3.5 h-3.5 ${isClearing ? 'animate-spin' : ''}`} />
+            <span>{isClearing ? 'Clearing Database...' : 'Clear All Records from Database'}</span>
           </button>
         </div>
 

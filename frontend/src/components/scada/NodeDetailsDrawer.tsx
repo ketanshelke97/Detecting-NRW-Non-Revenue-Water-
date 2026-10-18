@@ -10,6 +10,7 @@ export function NodeDetailsDrawer() {
   const isolatedZoneNodes = useScadaStore((state) => state.isolatedZoneNodes);
   const setIsolatedZoneNodes = useScadaStore((state) => state.setIsolatedZoneNodes);
   const openDispatchModal = useScadaStore((state) => state.openDispatchModal);
+  const activeLatchedIncident = useScadaStore((state) => state.activeLatchedIncident);
   const { data: topology } = useNetworkTopology();
 
   if (!selectedNodeId) return null;
@@ -141,7 +142,16 @@ export function NodeDetailsDrawer() {
         {telemetry?.isLeak && (
           <button
             onClick={() => {
+              const matchingId = String(activeLatchedIncident?.node_id) === String(selectedNodeId) 
+                ? activeLatchedIncident?.id 
+                : undefined;
+              const matchingCode = String(activeLatchedIncident?.node_id) === String(selectedNodeId) 
+                ? activeLatchedIncident?.incident_code 
+                : undefined;
+
               openDispatchModal({
+                id: matchingId,
+                incident_code: matchingCode,
                 node_id: selectedNodeId,
                 leak_type: 'Abrupt Rupture',
                 diameter_mm: 50.0,

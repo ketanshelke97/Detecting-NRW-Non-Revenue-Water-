@@ -46,6 +46,7 @@ export const FieldDispatchModal: React.FC = () => {
   const setSelectedNodeId = useScadaStore((state) => state.setSelectedNodeId);
   const activeDispatches = useScadaStore((state) => state.activeDispatches);
   const addActiveDispatch = useScadaStore((state) => state.addActiveDispatch);
+  const activeLatchedIncident = useScadaStore((state) => state.activeLatchedIncident);
 
   // Form State
   const [teamName, setTeamName] = useState('Jal Shakti Rapid Response Unit 1');
@@ -104,9 +105,10 @@ export const FieldDispatchModal: React.FC = () => {
     (latestInference?.loss?.financial_loss_inr_per_hour || (flowLph * 0.025))
   );
 
-  const incidentCode = dispatchIncidentTarget?.incident_code || 'PENDING DISPATCH';
-  const incidentId = dispatchIncidentTarget?.id;
-  const targetIncidentId = dispatchedResult?.id || dispatchIncidentTarget?.id;
+  const matchingLatched = String(activeLatchedIncident?.node_id) === String(targetNodeId) ? activeLatchedIncident : null;
+  const incidentId = dispatchIncidentTarget?.id || matchingLatched?.id;
+  const incidentCode = dispatchIncidentTarget?.incident_code || matchingLatched?.incident_code || 'PENDING DISPATCH';
+  const targetIncidentId = dispatchedResult?.id || incidentId;
   const currentActiveDispatch = activeDispatches.find(
     (d) => d.incidentId === targetIncidentId || d.nodeId === targetNodeId
   );

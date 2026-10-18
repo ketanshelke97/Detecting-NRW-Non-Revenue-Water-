@@ -103,19 +103,53 @@ export const HistoricalAuditModal: React.FC = () => {
   const auditMetrics = useMemo(() => {
     if (!selectedIncident) return null;
 
-    const onsetDate = new Date(selectedIncident.timestamp);
-    const dispatchDate = selectedIncident.dispatched_at ? new Date(selectedIncident.dispatched_at) : null;
-    const resolvedDate = selectedIncident.resolved_at ? new Date(selectedIncident.resolved_at) : null;
+    let onsetDate = new Date(selectedIncident.timestamp);
+    let dispatchDate = selectedIncident.dispatched_at ? new Date(selectedIncident.dispatched_at) : null;
+    let resolvedDate = selectedIncident.resolved_at ? new Date(selectedIncident.resolved_at) : null;
 
-    // Elapsed duration in seconds
-    const endDate = resolvedDate || new Date();
-    const durationSeconds = Math.max(1, Math.floor((endDate.getTime() - onsetDate.getTime()) / 1000));
-    const durationMinutes = Math.floor(durationSeconds / 60);
-    const durationRemainingSec = durationSeconds % 60;
+    // Detect if dispatchDate or resolvedDate were recorded in UTC (~5.5 hours behind local IST)
+    if (dispatchDate && dispatchDate.getTime() < onsetDate.getTime()) {
+      const offsetMs = onsetDate.getTime() - dispatchDate.getTime();
+      if (offsetMs >= 5 * 3600 * 1000 && offsetMs <= 6 * 3600 * 1000) {
+        dispatchDate = new Date(dispatchDate.getTime() + 5.5 * 3600 * 1000);
+      }
+    }
+    if (resolvedDate && resolvedDate.getTime() < onsetDate.getTime()) {
+      const offsetMs = onsetDate.getTime() - resolvedDate.getTime();
+      if (offsetMs >= 5 * 3600 * 1000 && offsetMs <= 6 * 3600 * 1000) {
+        resolvedDate = new Date(resolvedDate.getTime() + 5.5 * 3600 * 1000);
+      }
+    }
 
     // Efflux rates
     const effluxLph = selectedIncident.water_loss_liters_per_hour || 5000;
     const effluxM3h = effluxLph / 1000;
+
+    // Elapsed duration in seconds, hours, minutes
+    const endDate = resolvedDate || new Date();
+    let durationSeconds = Math.floor((endDate.getTime() - onsetDate.getTime()) / 1000);
+
+    // Fallback: if duration computed from timestamps is non-positive, derive from physical volume / rate
+    if (durationSeconds <= 0) {
+      if (selectedIncident.total_volume_lost_m3 > 0 && effluxM3h > 0) {
+        durationSeconds = Math.max(1, Math.round((selectedIncident.total_volume_lost_m3 / effluxM3h) * 3600));
+      } else {
+        durationSeconds = 60;
+      }
+    }
+
+    const durationHours = Math.floor(durationSeconds / 3600);
+    const durationMinutes = Math.floor((durationSeconds % 3600) / 60);
+    const durationRemainingSec = durationSeconds % 60;
+
+    let durationDisplay = '';
+    if (durationHours > 0) {
+      durationDisplay = `${durationHours} hr${durationHours > 1 ? 's' : ''} ${durationMinutes} min${durationMinutes !== 1 ? 's' : ''}`;
+    } else if (durationMinutes > 0) {
+      durationDisplay = `${durationMinutes} min${durationMinutes !== 1 ? 's' : ''} ${durationRemainingSec}s`;
+    } else {
+      durationDisplay = `${durationRemainingSec}s`;
+    }
 
     // Water volume lost
     const volumeLostM3 = selectedIncident.total_volume_lost_m3 > 0 
@@ -161,8 +195,10 @@ export const HistoricalAuditModal: React.FC = () => {
       onsetDate,
       dispatchDate,
       resolvedDate,
+      durationHours,
       durationMinutes,
       durationRemainingSec,
+      durationDisplay,
       effluxLph,
       effluxM3h,
       volumeLostM3,
@@ -412,102 +448,130 @@ export const HistoricalAuditModal: React.FC = () => {
 
               {/* Section 2: Audit Chronology & Containment Timeline */}
               <div className="mb-6">
-                <div className="flex items-center space-x-2 border-b border-scada-border print:border-slate-400 pb-1.5 mb-3">
-                  <Clock className="w-4 h-4 text-cyan-400 print:text-slate-800" />
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-cyan-400 print:text-slate-900">
-                    Section 2: Forensic Chronology & Operational Containment Timeline
-                  </h3>
+                <div className="flex items-center justify-between border-b border-scada-border print:border-slate-400 pb-1.5 mb-3">
+                  <div className="flex items-center space-x-2">
+                    <Clock className="w-4 h-4 text-cyan-400 print:text-slate-800" />
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-cyan-400 print:text-slate-900">
+                      Section 2: Incident Response & Containment Timeline (When Did It Happen?)
+                    </h3>
+                  </div>
+                  <span className="text-[10px] text-slate-400 print:text-slate-600 font-mono hidden sm:inline">
+                    Chronological Log &bull; Local SCADA Time
+                  </span>
                 </div>
 
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs bg-slate-900/50 print:bg-slate-50 p-3.5 rounded-lg border border-scada-border/60 print:border-slate-300">
                   <div>
-                    <span className="text-[10px] uppercase font-bold text-slate-400 print:text-slate-600 block">Anomaly Detected</span>
-                    <span className="font-mono text-slate-200 print:text-slate-800">
-                      {auditMetrics.onsetDate.toLocaleTimeString()}
+                    <span className="text-[10px] uppercase font-bold text-slate-400 print:text-slate-600 block">
+                      1. Leak Detected
+                    </span>
+                    <span className="font-mono text-slate-100 print:text-slate-900 font-bold text-sm">
+                      {auditMetrics.onsetDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                     </span>
                     <span className="text-[10px] text-slate-400 print:text-slate-600 block">
-                      {auditMetrics.onsetDate.toLocaleDateString()}
+                      {auditMetrics.onsetDate.toLocaleDateString()} &bull; AI Sensor Alert
                     </span>
                   </div>
 
                   <div>
-                    <span className="text-[10px] uppercase font-bold text-slate-400 print:text-slate-600 block">Crew Dispatched</span>
-                    <span className="font-mono text-slate-200 print:text-slate-800">
-                      {auditMetrics.dispatchDate ? auditMetrics.dispatchDate.toLocaleTimeString() : 'Immediate (Auto)'}
+                    <span className="text-[10px] uppercase font-bold text-slate-400 print:text-slate-600 block">
+                      2. Crew Dispatched
+                    </span>
+                    <span className="font-mono text-slate-100 print:text-slate-900 font-bold text-sm">
+                      {auditMetrics.dispatchDate ? auditMetrics.dispatchDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Immediate (Auto)'}
                     </span>
                     <span className="text-[10px] text-slate-400 print:text-slate-600 block">
-                      {auditMetrics.dispatchDate ? auditMetrics.dispatchDate.toLocaleDateString() : 'Rapid Unit 1'}
+                      {selectedIncident.dispatch_team || 'Jal Shakti Rapid Unit 1'}
                     </span>
                   </div>
 
                   <div>
-                    <span className="text-[10px] uppercase font-bold text-slate-400 print:text-slate-600 block">Fault Contained</span>
-                    <span className="font-mono text-emerald-400 print:text-emerald-800 font-bold">
-                      {auditMetrics.resolvedDate ? auditMetrics.resolvedDate.toLocaleTimeString() : 'Field Active'}
+                    <span className="text-[10px] uppercase font-bold text-slate-400 print:text-slate-600 block">
+                      3. Leak Repaired & Resolved
+                    </span>
+                    <span className="font-mono text-emerald-400 print:text-emerald-800 font-bold text-sm">
+                      {auditMetrics.resolvedDate ? auditMetrics.resolvedDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Field Active'}
                     </span>
                     <span className="text-[10px] text-slate-400 print:text-slate-600 block">
-                      {auditMetrics.resolvedDate ? auditMetrics.resolvedDate.toLocaleDateString() : 'Mitigation in motion'}
+                      {auditMetrics.resolvedDate ? `${auditMetrics.resolvedDate.toLocaleDateString()} • Normal Pressure Restored` : 'Field Team At Site'}
                     </span>
                   </div>
 
                   <div>
-                    <span className="text-[10px] uppercase font-bold text-slate-400 print:text-slate-600 block">Total Loss Window</span>
+                    <span className="text-[10px] uppercase font-bold text-slate-400 print:text-slate-600 block">
+                      4. Total Leak Duration
+                    </span>
                     <span className="font-mono font-bold text-amber-400 print:text-slate-900 text-sm">
-                      {auditMetrics.durationMinutes}m {auditMetrics.durationRemainingSec}s
+                      {auditMetrics.durationDisplay}
                     </span>
-                    <span className="text-[10px] text-slate-400 print:text-slate-600 block">Continuous Efflux</span>
+                    <span className="text-[10px] text-slate-400 print:text-slate-600 block">
+                      Total Time Water Was Leaking
+                    </span>
                   </div>
                 </div>
               </div>
 
               {/* Section 3: CPHEEO Water Balance & Loss Accounting */}
               <div className="mb-6">
-                <div className="flex items-center space-x-2 border-b border-scada-border print:border-slate-400 pb-1.5 mb-3">
-                  <Droplet className="w-4 h-4 text-cyan-400 print:text-slate-800" />
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-cyan-400 print:text-slate-900">
-                    Section 3: CPHEEO Water Balance & Loss Accounting Matrix
-                  </h3>
+                <div className="flex items-center justify-between border-b border-scada-border print:border-slate-400 pb-1.5 mb-3">
+                  <div className="flex items-center space-x-2">
+                    <Droplet className="w-4 h-4 text-cyan-400 print:text-slate-800" />
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-cyan-400 print:text-slate-900">
+                      Section 3: CPHEEO Water Balance & Loss Accounting Matrix (How Much Was Lost vs Saved?)
+                    </h3>
+                  </div>
+                  <span className="text-[10px] text-slate-400 print:text-slate-600 font-mono hidden sm:inline">
+                    Tariff Standard: ₹25.00/m³ &bull; Indian Household: 675 L/day
+                  </span>
                 </div>
 
                 {/* 4 KPI Matrix Tiles */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
                   <div className="p-3 rounded-lg bg-slate-900/80 print:bg-slate-100 border border-scada-border print:border-slate-300 text-center">
-                    <span className="text-[10px] uppercase font-bold text-slate-400 print:text-slate-600 block">Efflux Flow Rate</span>
+                    <span className="text-[10px] uppercase font-bold text-slate-400 print:text-slate-600 block">
+                      Leak Flow Rate (Speed)
+                    </span>
                     <span className="text-lg font-black font-mono text-cyan-400 print:text-slate-900">
-                      {auditMetrics.effluxLph.toLocaleString()}
+                      {auditMetrics.effluxLph.toLocaleString()} L/h
                     </span>
                     <span className="text-[10px] text-slate-400 print:text-slate-600 block font-mono">
-                      L/h ({auditMetrics.effluxM3h.toFixed(2)} m³/h)
+                      Speed water escaped ({auditMetrics.effluxM3h.toFixed(1)} m³/h)
                     </span>
                   </div>
 
                   <div className="p-3 rounded-lg bg-slate-900/80 print:bg-slate-100 border border-red-500/30 print:border-slate-300 text-center">
-                    <span className="text-[10px] uppercase font-bold text-red-400 print:text-slate-600 block">Cumulative Loss</span>
+                    <span className="text-[10px] uppercase font-bold text-red-400 print:text-slate-600 block">
+                      Total Water Lost
+                    </span>
                     <span className="text-lg font-black font-mono text-red-400 print:text-slate-900">
-                      {auditMetrics.volumeLostM3.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 3 })}
+                      {auditMetrics.volumeLostM3.toLocaleString('en-IN', { minimumFractionDigits: 1, maximumFractionDigits: 2 })} m³
                     </span>
                     <span className="text-[10px] text-slate-400 print:text-slate-600 block font-mono">
-                      m³ ({auditMetrics.volumeLostLiters.toLocaleString()} L)
+                      Clean drinking water ({auditMetrics.volumeLostLiters.toLocaleString('en-IN')} L)
                     </span>
                   </div>
 
                   <div className="p-3 rounded-lg bg-slate-900/80 print:bg-slate-100 border border-amber-500/30 print:border-slate-300 text-center">
-                    <span className="text-[10px] uppercase font-bold text-amber-400 print:text-slate-600 block">Direct Tariff Cost</span>
+                    <span className="text-[10px] uppercase font-bold text-amber-400 print:text-slate-600 block">
+                      Direct Financial Loss
+                    </span>
                     <span className="text-lg font-black font-mono text-amber-400 print:text-slate-900">
                       ₹{Math.round(auditMetrics.financialCostInr).toLocaleString('en-IN')}
                     </span>
                     <span className="text-[10px] text-slate-400 print:text-slate-600 block font-mono">
-                      @ ₹25.00/m³ Tariff
+                      Municipal bill lost (@ ₹25/m³ tariff)
                     </span>
                   </div>
 
                   <div className="p-3 rounded-lg bg-slate-900/80 print:bg-slate-100 border border-emerald-500/30 print:border-slate-300 text-center">
-                    <span className="text-[10px] uppercase font-bold text-emerald-400 print:text-slate-600 block">Indian Households</span>
+                    <span className="text-[10px] uppercase font-bold text-emerald-400 print:text-slate-600 block">
+                      Household Daily Needs
+                    </span>
                     <span className="text-lg font-black font-mono text-emerald-400 print:text-slate-900">
-                      {auditMetrics.householdDaysEquiv}
+                      {Number(auditMetrics.householdDaysEquiv).toLocaleString('en-IN')}
                     </span>
                     <span className="text-[10px] text-slate-400 print:text-slate-600 block font-mono">
-                      Family-Days Supply Equiv.
+                      Family-Days of Water Equivalent
                     </span>
                   </div>
                 </div>
@@ -518,16 +582,22 @@ export const HistoricalAuditModal: React.FC = () => {
                     <thead className="bg-slate-900 print:bg-slate-200 text-slate-300 print:text-slate-800 font-bold uppercase text-[10px]">
                       <tr>
                         <th className="p-2.5 border-b border-scada-border print:border-slate-300">Audited Metric</th>
-                        <th className="p-2.5 border-b border-scada-border print:border-slate-300">Conventional Municipal Standard (48h Latency)</th>
-                        <th className="p-2.5 border-b border-scada-border print:border-slate-300">Jal Shakti AI SCADA Twin (Instant Pinpointing)</th>
-                        <th className="p-2.5 border-b border-scada-border print:border-slate-300 text-right">Net Resource Conserved</th>
+                        <th className="p-2.5 border-b border-scada-border print:border-slate-300">
+                          Old Conventional Method (Without AI: 48h Delay)
+                        </th>
+                        <th className="p-2.5 border-b border-scada-border print:border-slate-300">
+                          Jal Shakti AI SCADA Twin (Instant Pinpointing)
+                        </th>
+                        <th className="p-2.5 border-b border-scada-border print:border-slate-300 text-right">
+                          Net Resource Conserved (Saved)
+                        </th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-scada-border/60 print:divide-slate-300 font-mono text-slate-300 print:text-slate-900">
                       <tr className="hover:bg-slate-900/30 print:hover:bg-transparent">
                         <td className="p-2.5 font-sans font-semibold text-slate-200 print:text-slate-900">Physical Water Escaped</td>
                         <td className="p-2.5 text-slate-400 print:text-slate-600">{auditMetrics.baselineLossM3.toLocaleString()} m³</td>
-                        <td className="p-2.5 text-red-400 print:text-slate-900 font-bold">{auditMetrics.volumeLostM3.toFixed(2)} m³</td>
+                        <td className="p-2.5 text-red-400 print:text-slate-900 font-bold">{auditMetrics.volumeLostM3.toFixed(1)} m³</td>
                         <td className="p-2.5 text-right text-emerald-400 print:text-emerald-800 font-bold">
                           +{auditMetrics.avoidedVolumeM3.toLocaleString()} m³ ({auditMetrics.mitigationEfficiencyPct}%)
                         </td>
@@ -543,9 +613,9 @@ export const HistoricalAuditModal: React.FC = () => {
                       <tr className="hover:bg-slate-900/30 print:hover:bg-transparent">
                         <td className="p-2.5 font-sans font-semibold text-slate-200 print:text-slate-900">Detection-to-Isolation Latency</td>
                         <td className="p-2.5 text-slate-400 print:text-slate-600">2,880 minutes (48.0 hrs)</td>
-                        <td className="p-2.5 text-cyan-400 print:text-slate-900 font-bold">{auditMetrics.durationMinutes} minutes</td>
+                        <td className="p-2.5 text-cyan-400 print:text-slate-900 font-bold">{auditMetrics.durationDisplay}</td>
                         <td className="p-2.5 text-right text-emerald-400 print:text-emerald-800 font-bold">
-                          {Math.round(((2880 - auditMetrics.durationMinutes) / 2880) * 100)}% Response Acceleration
+                          {Math.round(((2880 - (auditMetrics.durationMinutes + auditMetrics.durationHours * 60)) / 2880) * 100)}% Response Acceleration
                         </td>
                       </tr>
                     </tbody>
@@ -555,42 +625,58 @@ export const HistoricalAuditModal: React.FC = () => {
 
               {/* Section 4: Engineering Containment & Isolation Protocol */}
               <div className="mb-6">
-                <div className="flex items-center space-x-2 border-b border-scada-border print:border-slate-400 pb-1.5 mb-3">
-                  <ShieldCheck className="w-4 h-4 text-cyan-400 print:text-slate-800" />
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-cyan-400 print:text-slate-900">
-                    Section 4: Field Containment & Valve Isolation Protocol
-                  </h3>
+                <div className="flex items-center justify-between border-b border-scada-border print:border-slate-400 pb-1.5 mb-3">
+                  <div className="flex items-center space-x-2">
+                    <ShieldCheck className="w-4 h-4 text-cyan-400 print:text-slate-800" />
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-cyan-400 print:text-slate-900">
+                      Section 4: Field Repair & Valve Isolation Protocol (How Was It Fixed?)
+                    </h3>
+                  </div>
+                  <span className="text-[10px] text-slate-400 print:text-slate-600 font-mono hidden sm:inline">
+                    Pipe Clamping &bull; Boundary Valving &bull; Certified On Site
+                  </span>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs bg-slate-900/50 print:bg-slate-50 p-3.5 rounded-lg border border-scada-border/60 print:border-slate-300">
                   <div>
-                    <span className="text-[10px] uppercase font-bold text-slate-400 print:text-slate-600 block mb-1">Isolation Boundary Valves</span>
-                    <div className="flex flex-wrap gap-1">
+                    <span className="text-[10px] uppercase font-bold text-slate-400 print:text-slate-600 block mb-1">
+                      Closed Boundary Valves (Isolated Area)
+                    </span>
+                    <div className="flex flex-wrap gap-1 mb-1">
                       {(workOrderData?.isolation_protocol.target_valves || [`V-PIPE${selectedIncident.node_id}`]).map((v, i) => (
                         <span key={i} className="font-mono text-[11px] px-2 py-0.5 rounded bg-cyan-500/10 print:bg-slate-200 text-cyan-300 print:text-slate-900 border border-cyan-500/30 print:border-slate-400 font-bold">
                           {v}
                         </span>
                       ))}
                     </div>
+                    <span className="text-[10px] text-slate-400 print:text-slate-600 block">
+                      Valves shut by crew to isolate damaged pipe section
+                    </span>
                   </div>
 
                   <div>
-                    <span className="text-[10px] uppercase font-bold text-slate-400 print:text-slate-600 block mb-1">Mitigation Hardware Applied</span>
+                    <span className="text-[10px] uppercase font-bold text-slate-400 print:text-slate-600 block mb-1">
+                      Permanent Pipe Repair Clamp
+                    </span>
                     <span className="font-semibold text-slate-200 print:text-slate-800 block">
                       {selectedIncident.diameter_mm >= 50 
-                        ? `Full-Enclosure Split Sleeve Collar (${selectedIncident.diameter_mm}mm)` 
+                        ? `Full-Enclosure Split Collar Clamp (${selectedIncident.diameter_mm}mm)` 
                         : `Stainless Steel Repair Clamp (${selectedIncident.diameter_mm}mm)`}
                     </span>
-                    <span className="text-[10px] text-slate-400 print:text-slate-600">Acoustic Correlator & Pressure Logger</span>
+                    <span className="text-[10px] text-slate-400 print:text-slate-600">
+                      Acoustic leak correlator & ground microphone used to pinpoint pipe
+                    </span>
                   </div>
 
                   <div>
-                    <span className="text-[10px] uppercase font-bold text-slate-400 print:text-slate-600 block mb-1">Field Response Crew</span>
+                    <span className="text-[10px] uppercase font-bold text-slate-400 print:text-slate-600 block mb-1">
+                      Field Response Unit & Lead Engineer
+                    </span>
                     <span className="font-semibold text-slate-200 print:text-slate-800 block">
                       {selectedIncident.dispatch_team || 'Jal Shakti Rapid Response Unit 1'}
                     </span>
                     <span className="text-[10px] text-slate-400 print:text-slate-600 font-mono">
-                      Lead: {selectedIncident.technician_name || 'Er. Rajesh Patil'}
+                      Lead: {selectedIncident.technician_name || 'Er. Rajesh Patil'} &bull; Verified on Site
                     </span>
                   </div>
                 </div>

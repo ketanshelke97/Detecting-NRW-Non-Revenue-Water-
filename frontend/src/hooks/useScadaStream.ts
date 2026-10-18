@@ -83,8 +83,17 @@ function connectSharedWebSocket() {
         const prevHist = store.telemetryHistory;
         const prevPt = prevHist.find((p) => p.step === ((data.step_index || 0) - 1));
         const prevLoss = (data.step_index === 0 || !prevPt) ? 0 : prevPt.cumulativeLossM3;
-        const stepLossM3 = (flowLph * 0.5) / 1000.0;
-        const cumulativeLossM3 = Number((prevLoss + stepLossM3).toFixed(2));
+
+        // Option 2: 30 minutes (0.5 hr) in Scenario Lab, 1 second (1 / 3600 hr) in Live SCADA
+        const isScenarioMode = Boolean(data.scenario_id) || data.mode === 'historical';
+        const dtHours = isScenarioMode ? 0.5 : (1.0 / 3600.0);
+        const stepLossM3 = (flowLph * dtHours) / 1000.0;
+        let cumulativeLossM3 = Number((prevLoss + stepLossM3).toFixed(2));
+
+        // When backend provides an actively latched incident, synchronize directly with verified database volume
+        if (data.active_incident && typeof data.active_incident.total_volume_lost_m3 === 'number') {
+          cumulativeLossM3 = Number(data.active_incident.total_volume_lost_m3.toFixed(2));
+        }
 
         store.addTelemetryHistoryPoint({
           step: data.step_index ?? 0,
