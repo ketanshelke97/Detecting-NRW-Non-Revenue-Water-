@@ -261,7 +261,12 @@ Divided into 5 small, reviewable implementation steps:
     - Enhanced [`backend/app/models/incident.py`](file:///c:/Users/Ketan%20suresh%20shelke/NRW/Detecting-NRW-Non-Revenue-Water-/backend/app/models/incident.py) with `dispatched_at`, `dispatch_team`, `technician_name`, `contact_number`, `priority`, `work_order_code`, `isolation_valves`, `equipment_checklist`.
     - Added schema auto-migration `upgrade_incident_table_schema()` running at server launch.
     - Implemented `POST /api/incidents/{id}/dispatch`, `POST /api/incidents/dispatch-direct`, and `GET /api/incidents/{id}/work-order` in [`backend/app/routers/incidents.py`](file:///c:/Users/Ketan%20suresh%20shelke/NRW/Detecting-NRW-Non-Revenue-Water-/backend/app/routers/incidents.py).
-    - Lifecycle state machine transitions incidents to `Dispatched` and notifies UI in real-time.
+    - **Work Order Locking & Field Repair Lifecycle Engine**:
+      - **Modal Form Freezing (`isLocked`)**: Once confirmed or dispatched, all valve checkboxes, equipment toggles, crew names, and priority fields are frozen (`disabled={true}`) with official `WORK ORDER COMMITTED & LOCKED` badges.
+      - **Auto-Repair Toggle & Realistic Field Progression**: Operator can enable *"⚡ Auto-execute physical repair upon crew arrival (~30-60s simulation ETA)"*.
+      - **Live Countdown Progression**: Background timer transitions tickets through real-world phases:
+        $$\text{Dispatched (Crew En Route: XXs)} \longrightarrow \text{On-Site (Clamping Pipe: XXs)} \longrightarrow \text{Repaired & Normalized}$$
+      - **Dual-Action Quick Completion ("Complete Repair Now")**: Available directly on the dispatched incident cards (`IncidentLogDrawer`), AI Diagnostic HUD (`AiDiagnosticPanel`), and the dispatch modal, allowing instant physical fault clearing (`triggerClearFault()`), EPANET hydraulic recovery, loss plateauing, and incident closure.
   - **Verification**:
     - Frontend compiled with `npm run build` (0 TypeScript / JSX errors).
     - Backend endpoints verified via `backend/scripts/test_incidents_api.py` (100% passing).

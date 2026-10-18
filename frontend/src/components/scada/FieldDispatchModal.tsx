@@ -13,10 +13,12 @@ import {
   Zap,
   Phone,
   User,
-  ShieldCheck
+  ShieldCheck,
+  Lock
 } from 'lucide-react';
 import { useScadaStore } from '../../store/scadaStore';
 import { incidentService, type IncidentItem, type WorkOrderData } from '../../services/incidentService';
+import { executeFieldRepair } from '../../services/fieldDispatchService';
 
 // Physical Net1 network isolation mapping
 const NET1_ISOLATION_MAP: Record<string, { valves: string[]; pipes: string[]; zone: string; elevation: number }> = {
@@ -42,6 +44,8 @@ export const FieldDispatchModal: React.FC = () => {
   const activeFault = useScadaStore((state) => state.activeFault);
   const triggerIncidentRefresh = useScadaStore((state) => state.triggerIncidentRefresh);
   const setSelectedNodeId = useScadaStore((state) => state.setSelectedNodeId);
+  const activeDispatches = useScadaStore((state) => state.activeDispatches);
+  const addActiveDispatch = useScadaStore((state) => state.addActiveDispatch);
 
   // Form State
   const [teamName, setTeamName] = useState('Jal Shakti Rapid Response Unit 1');
@@ -49,6 +53,7 @@ export const FieldDispatchModal: React.FC = () => {
   const [contactNumber, setContactNumber] = useState('+91 98230 11223');
   const [priority, setPriority] = useState('P1 - Critical Emergency (ETA: 15-20 min)');
   const [dispatchNotes, setDispatchNotes] = useState('');
+  const [autoRepairOnArrival, setAutoRepairOnArrival] = useState(true);
   
   // Interactive checklist states
   const [checkedValves, setCheckedValves] = useState<Record<string, boolean>>({});
@@ -58,6 +63,10 @@ export const FieldDispatchModal: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [dispatchedResult, setDispatchedResult] = useState<any | null>(null);
   const [workOrderData, setWorkOrderData] = useState<WorkOrderData | null>(null);
+
+  // Check if target is already dispatched or newly dispatched
+  const isAlreadyDispatched = dispatchIncidentTarget?.status === 'Dispatched';
+  const isLocked = Boolean(dispatchedResult || isAlreadyDispatched);
 
   // Derive target incident parameters
   const targetNodeId = String(
@@ -97,6 +106,10 @@ export const FieldDispatchModal: React.FC = () => {
 
   const incidentCode = dispatchIncidentTarget?.incident_code || 'PENDING DISPATCH';
   const incidentId = dispatchIncidentTarget?.id;
+  const targetIncidentId = dispatchedResult?.id || dispatchIncidentTarget?.id;
+  const currentActiveDispatch = activeDispatches.find(
+    (d) => d.incidentId === targetIncidentId || d.nodeId === targetNodeId
+  );
 
   // Generate dynamic equipment recommendations based on diameter
   const defaultEquipment = React.useMemo(() => {
@@ -126,8 +139,22 @@ export const FieldDispatchModal: React.FC = () => {
   // Reset/Initialize state on open
   useEffect(() => {
     if (isDispatchModalOpen) {
-      setDispatchedResult(null);
-      setWorkOrderData(null);
+      if (dispatchIncidentTarget?.status === 'Dispatched') {
+        setDispatchedResult(dispatchIncidentTarget);
+        if (dispatchIncidentTarget.dispatch_team) setTeamName(dispatchIncidentTarget.dispatch_team);
+        if (dispatchIncidentTarget.technician_name) setTechnicianName(dispatchIncidentTarget.technician_name);
+        if (dispatchIncidentTarget.contact_number) setContactNumber(dispatchIncidentTarget.contact_number);
+        if (dispatchIncidentTarget.priority) setPriority(dispatchIncidentTarget.priority);
+        if (dispatchIncidentTarget.notes) setDispatchNotes(dispatchIncidentTarget.notes);
+        if (dispatchIncidentTarget.id) {
+          incidentService.fetchWorkOrder(dispatchIncidentTarget.id)
+            .then((wo) => setWorkOrderData(wo))
+            .catch((err) => console.warn('Could not fetch work order preview:', err));
+        }
+      } else {
+        setDispatchedResult(null);
+        setWorkOrderData(null);
+      }
       
       // Auto-check all isolation valves by default
       const valveInit: Record<string, boolean> = {};
@@ -139,7 +166,7 @@ export const FieldDispatchModal: React.FC = () => {
       defaultEquipment.forEach((eq) => { equipInit[eq] = true; });
       setCheckedEquipment(equipInit);
     }
-  }, [isDispatchModalOpen, isolationData.valves, defaultEquipment]);
+  }, [isDispatchModalOpen, dispatchIncidentTarget, isolationData.valves, defaultEquipment]);
 
   if (!isDispatchModalOpen) return null;
 
@@ -193,6 +220,18 @@ export const FieldDispatchModal: React.FC = () => {
       setDispatchedResult(res);
       triggerIncidentRefresh();
 
+      // Register with active field dispatches for lifecycle progression
+      const eta = priority.includes('P1') ? 30 : priority.includes('P2') ? 45 : 60;
+      addActiveDispatch({
+        incidentId: res.id,
+        incidentCode: res.work_order_code || `WO-2026-${res.id}`,
+        nodeId: targetNodeId,
+        teamName: teamName,
+        technicianName: technicianName,
+        etaSeconds: eta,
+        autoRepair: autoRepairOnArrival,
+      });
+
       // Fetch complete printable work order
       try {
         const wo = await incidentService.fetchWorkOrder(res.id);
@@ -202,6 +241,17 @@ export const FieldDispatchModal: React.FC = () => {
       }
     } catch (err: any) {
       alert(`Dispatch Error: ${err.message || 'Failed to dispatch crew'}`);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleImmediateRepair = async () => {
+    if (!targetIncidentId) return;
+    setIsSubmitting(true);
+    try {
+      await executeFieldRepair(targetIncidentId, targetNodeId);
+      triggerIncidentRefresh();
     } finally {
       setIsSubmitting(false);
     }
@@ -233,9 +283,16 @@ export const FieldDispatchModal: React.FC = () => {
                 <h3 className="text-base sm:text-lg font-bold text-slate-100 tracking-tight">
                   1-Click Jal Shakti Field Crew Dispatch
                 </h3>
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 font-semibold">
-                  EMERGENCY WORK ORDER
-                </span>
+                {isLocked ? (
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold flex items-center space-x-1">
+                    <Lock className="w-3 h-3 mr-1" />
+                    <span>WORK ORDER COMMITTED & LOCKED</span>
+                  </span>
+                ) : (
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 font-semibold">
+                    EMERGENCY WORK ORDER
+                  </span>
+                )}
               </div>
               <p className="text-xs text-slate-400">
                 Ministry of Jal Shakti • Urban Water Mission • Physical NRW Containment Protocol
@@ -254,23 +311,24 @@ export const FieldDispatchModal: React.FC = () => {
         {/* Scrollable Modal Content */}
         <div className="p-6 overflow-y-auto space-y-6">
 
-          {/* Success Banner if already dispatched */}
-          {dispatchedResult && (
-            <div className="p-4 rounded-xl bg-emerald-950/40 border border-emerald-500/50 shadow-[0_0_20px_rgba(16,185,129,0.2)] animate-in fade-in zoom-in-95 duration-200">
-              <div className="flex items-start justify-between">
+          {/* Success Banner if already dispatched or locked */}
+          {isLocked && (
+            <div className="p-4 rounded-xl bg-emerald-950/40 border border-emerald-500/50 shadow-[0_0_20px_rgba(16,185,129,0.2)] animate-in fade-in zoom-in-95 duration-200 space-y-3">
+              <div className="flex items-start justify-between flex-wrap gap-3">
                 <div className="flex items-center space-x-3">
-                  <div className="w-9 h-9 rounded-lg bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400">
+                  <div className="w-9 h-9 rounded-lg bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shrink-0">
                     <CheckCircle2 className="w-5 h-5" />
                   </div>
                   <div>
-                    <h4 className="text-sm font-bold text-emerald-300">
-                      Work Order Successfully Dispatched to Field Crew
+                    <h4 className="text-sm font-bold text-emerald-300 flex items-center space-x-2">
+                      <span>Work Order Dispatched & Locked</span>
+                      <span className="text-xs font-normal text-slate-400 font-mono">• {targetNodeId ? `Junction ${targetNodeId}` : ''}</span>
                     </h4>
                     <p className="text-xs text-slate-300 mt-0.5">
-                      Work Order <span className="font-mono font-bold text-emerald-300">{workOrderData?.work_order_code || dispatchedResult.work_order_code || `WO-2026-${dispatchedResult.id}`}</span> has been transmitted to <span className="font-semibold text-slate-100">{workOrderData?.field_crew?.team_name || dispatchedResult.dispatch_team || teamName}</span>.
+                      Work Order <span className="font-mono font-bold text-emerald-300">{workOrderData?.work_order_code || (dispatchedResult && dispatchedResult.work_order_code) || `WO-2026-${targetIncidentId || '0001'}`}</span> has been transmitted to <span className="font-semibold text-slate-100">{workOrderData?.field_crew?.team_name || (dispatchedResult && dispatchedResult.dispatch_team) || teamName}</span>.
                     </p>
                     {workOrderData?.isolation_protocol?.procedure_summary && (
-                      <p className="text-xs text-emerald-400/90 mt-1.5 flex items-center space-x-1.5">
+                      <p className="text-xs text-emerald-400/90 mt-1 flex items-center space-x-1.5">
                         <span className="font-bold">Protocol:</span>
                         <span>{workOrderData.isolation_protocol.procedure_summary}</span>
                         <span className="text-slate-400">({workOrderData.isolation_protocol.estimated_affected_connections} affected connections)</span>
@@ -279,13 +337,37 @@ export const FieldDispatchModal: React.FC = () => {
                   </div>
                 </div>
 
-                <button
-                  onClick={handlePrint}
-                  className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold text-xs flex items-center space-x-1.5 shadow transition-all"
-                >
-                  <Printer className="w-3.5 h-3.5" />
-                  <span>Print Work Order</span>
-                </button>
+                <div className="flex items-center space-x-2">
+                  {currentActiveDispatch && (
+                    <>
+                      {currentActiveDispatch.phase === 'en_route' && (
+                        <span className="px-2.5 py-1 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/40 text-xs font-bold flex items-center space-x-1.5 animate-pulse">
+                          <Truck className="w-3.5 h-3.5" />
+                          <span>Crew En Route ({currentActiveDispatch.remainingSeconds}s)</span>
+                        </span>
+                      )}
+                      {currentActiveDispatch.phase === 'on_site' && (
+                        <span className="px-2.5 py-1 rounded-lg bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 text-xs font-bold flex items-center space-x-1.5 animate-pulse">
+                          <Wrench className="w-3.5 h-3.5" />
+                          <span>On-Site Clamping ({currentActiveDispatch.remainingSeconds}s)</span>
+                        </span>
+                      )}
+                      {currentActiveDispatch.phase === 'repaired' && (
+                        <span className="px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-xs font-bold flex items-center space-x-1.5">
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          <span>Physical Repair Complete</span>
+                        </span>
+                      )}
+                    </>
+                  )}
+                  <button
+                    onClick={handlePrint}
+                    className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold text-xs flex items-center space-x-1.5 shadow transition-all"
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                    <span>Print Work Order</span>
+                  </button>
+                </div>
               </div>
             </div>
           )}
@@ -385,8 +467,14 @@ export const FieldDispatchModal: React.FC = () => {
             <div className="flex items-center justify-between border-b border-scada-border/40 pb-2">
               <div className="flex items-center space-x-2">
                 <ShieldAlert className="w-4 h-4 text-amber-400" />
-                <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider">
-                  Hydraulic Isolation Protocol & Upstream/Downstream Valves
+                <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center space-x-2">
+                  <span>Hydraulic Isolation Protocol & Upstream/Downstream Valves</span>
+                  {isLocked && (
+                    <span className="text-[10px] text-amber-400 font-mono flex items-center space-x-1">
+                      <Lock className="w-3 h-3" />
+                      <span>(Locked)</span>
+                    </span>
+                  )}
                 </h4>
               </div>
               <span className="text-[10px] font-mono text-slate-400">
@@ -404,8 +492,10 @@ export const FieldDispatchModal: React.FC = () => {
                 return (
                   <div
                     key={valveId}
-                    onClick={() => setCheckedValves((prev) => ({ ...prev, [valveId]: !isChecked }))}
-                    className={`p-3 rounded-lg border cursor-pointer transition-all flex items-center justify-between ${
+                    onClick={() => !isLocked && setCheckedValves((prev) => ({ ...prev, [valveId]: !isChecked }))}
+                    className={`p-3 rounded-lg border transition-all flex items-center justify-between ${
+                      isLocked ? 'cursor-default' : 'cursor-pointer'
+                    } ${
                       isChecked 
                         ? 'bg-amber-950/30 border-amber-500/50 text-slate-100 shadow-[0_0_12px_rgba(245,158,11,0.15)]' 
                         : 'bg-scada-bg/50 border-scada-border/60 text-slate-400 opacity-60'
@@ -441,8 +531,14 @@ export const FieldDispatchModal: React.FC = () => {
             <div className="flex items-center justify-between border-b border-scada-border/40 pb-2">
               <div className="flex items-center space-x-2">
                 <Wrench className="w-4 h-4 text-cyan-400" />
-                <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider">
-                  Required Crew Equipment Checklist (Auto-Sized for Ø {diameterMm.toFixed(0)} mm)
+                <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center space-x-2">
+                  <span>Required Crew Equipment Checklist (Auto-Sized for Ø {diameterMm.toFixed(0)} mm)</span>
+                  {isLocked && (
+                    <span className="text-[10px] text-cyan-400 font-mono flex items-center space-x-1">
+                      <Lock className="w-3 h-3" />
+                      <span>(Locked)</span>
+                    </span>
+                  )}
                 </h4>
               </div>
               <span className="text-[10px] font-mono text-slate-400">
@@ -456,7 +552,9 @@ export const FieldDispatchModal: React.FC = () => {
                 return (
                   <label
                     key={idx}
-                    className={`flex items-center space-x-2.5 p-2 rounded-lg border cursor-pointer text-xs transition-colors ${
+                    className={`flex items-center space-x-2.5 p-2 rounded-lg border text-xs transition-colors ${
+                      isLocked ? 'cursor-default opacity-85' : 'cursor-pointer'
+                    } ${
                       isChecked 
                         ? 'bg-cyan-950/20 border-cyan-500/30 text-slate-200' 
                         : 'bg-scada-bg/40 border-scada-border/40 text-slate-500'
@@ -465,8 +563,9 @@ export const FieldDispatchModal: React.FC = () => {
                     <input
                       type="checkbox"
                       checked={isChecked}
-                      onChange={(e) => setCheckedEquipment((prev) => ({ ...prev, [item]: e.target.checked }))}
-                      className="rounded border-slate-700 text-cyan-500 focus:ring-cyan-500/20 bg-slate-800"
+                      disabled={isLocked}
+                      onChange={(e) => !isLocked && setCheckedEquipment((prev) => ({ ...prev, [item]: e.target.checked }))}
+                      className="rounded border-slate-700 text-cyan-500 focus:ring-cyan-500/20 bg-slate-800 disabled:opacity-80"
                     />
                     <span className="select-none font-medium">{item}</span>
                   </label>
@@ -480,8 +579,14 @@ export const FieldDispatchModal: React.FC = () => {
             <div className="flex items-center justify-between border-b border-scada-border/40 pb-2">
               <div className="flex items-center space-x-2">
                 <HardHat className="w-4 h-4 text-emerald-400" />
-                <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider">
-                  Field Response Crew Assignment & Priority
+                <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center space-x-2">
+                  <span>Field Response Crew Assignment & Priority</span>
+                  {isLocked && (
+                    <span className="text-[10px] text-emerald-400 font-mono flex items-center space-x-1">
+                      <Lock className="w-3 h-3" />
+                      <span>(Locked)</span>
+                    </span>
+                  )}
                 </h4>
               </div>
               <span className="text-[10px] font-mono text-emerald-400 flex items-center space-x-1">
@@ -496,9 +601,10 @@ export const FieldDispatchModal: React.FC = () => {
               <div>
                 <label className="block text-slate-400 font-semibold mb-1">Assigned Rapid Response Unit</label>
                 <select
+                  disabled={isLocked}
                   value={teamName}
                   onChange={(e) => setTeamName(e.target.value)}
-                  className="w-full bg-scada-bg border border-scada-border rounded-lg px-3 py-2 text-slate-200 text-xs focus:outline-none focus:border-scada-accent"
+                  className="w-full bg-scada-bg border border-scada-border rounded-lg px-3 py-2 text-slate-200 text-xs focus:outline-none focus:border-scada-accent disabled:opacity-75 disabled:cursor-not-allowed disabled:bg-slate-900/60 disabled:border-slate-700/60"
                 >
                   <option value="Jal Shakti Rapid Response Unit 1">Jal Shakti Rapid Response Unit 1 (Zone Central)</option>
                   <option value="Jal Shakti Rapid Response Unit 2">Jal Shakti Rapid Response Unit 2 (North Sector)</option>
@@ -511,9 +617,10 @@ export const FieldDispatchModal: React.FC = () => {
               <div>
                 <label className="block text-slate-400 font-semibold mb-1">Dispatch Priority Level</label>
                 <select
+                  disabled={isLocked}
                   value={priority}
                   onChange={(e) => setPriority(e.target.value)}
-                  className="w-full bg-scada-bg border border-scada-border rounded-lg px-3 py-2 text-slate-200 text-xs focus:outline-none focus:border-scada-accent font-semibold"
+                  className="w-full bg-scada-bg border border-scada-border rounded-lg px-3 py-2 text-slate-200 text-xs focus:outline-none focus:border-scada-accent font-semibold disabled:opacity-75 disabled:cursor-not-allowed disabled:bg-slate-900/60 disabled:border-slate-700/60"
                 >
                   <option value="P1 - Critical Emergency (ETA: 15-20 min)">P1 - Critical Emergency (ETA: 15-20 min)</option>
                   <option value="P2 - High Priority Split (ETA: 45 min)">P2 - High Priority Split (ETA: 45 min)</option>
@@ -529,9 +636,10 @@ export const FieldDispatchModal: React.FC = () => {
                 </label>
                 <input
                   type="text"
+                  disabled={isLocked}
                   value={technicianName}
                   onChange={(e) => setTechnicianName(e.target.value)}
-                  className="w-full bg-scada-bg border border-scada-border rounded-lg px-3 py-2 text-slate-200 text-xs focus:outline-none focus:border-scada-accent"
+                  className="w-full bg-scada-bg border border-scada-border rounded-lg px-3 py-2 text-slate-200 text-xs focus:outline-none focus:border-scada-accent disabled:opacity-75 disabled:cursor-not-allowed disabled:bg-slate-900/60 disabled:border-slate-700/60"
                 />
               </div>
 
@@ -543,9 +651,10 @@ export const FieldDispatchModal: React.FC = () => {
                 </label>
                 <input
                   type="text"
+                  disabled={isLocked}
                   value={contactNumber}
                   onChange={(e) => setContactNumber(e.target.value)}
-                  className="w-full bg-scada-bg border border-scada-border rounded-lg px-3 py-2 text-slate-200 text-xs focus:outline-none focus:border-scada-accent"
+                  className="w-full bg-scada-bg border border-scada-border rounded-lg px-3 py-2 text-slate-200 text-xs focus:outline-none focus:border-scada-accent disabled:opacity-75 disabled:cursor-not-allowed disabled:bg-slate-900/60 disabled:border-slate-700/60"
                 />
               </div>
 
@@ -554,11 +663,27 @@ export const FieldDispatchModal: React.FC = () => {
                 <label className="block text-slate-400 font-semibold mb-1">Hazard Advisory / Special Field Instructions</label>
                 <textarea
                   rows={2}
+                  disabled={isLocked}
                   value={dispatchNotes}
                   onChange={(e) => setDispatchNotes(e.target.value)}
                   placeholder="e.g., Traffic diversion required on Main Sector Road; soil liquefaction risk around Junction 21..."
-                  className="w-full bg-scada-bg border border-scada-border rounded-lg px-3 py-2 text-slate-200 text-xs focus:outline-none focus:border-scada-accent resize-none"
+                  className="w-full bg-scada-bg border border-scada-border rounded-lg px-3 py-2 text-slate-200 text-xs focus:outline-none focus:border-scada-accent resize-none disabled:opacity-75 disabled:cursor-not-allowed disabled:bg-slate-900/60 disabled:border-slate-700/60"
                 />
+              </div>
+
+              {/* Auto-Repair Toggle */}
+              <div className="sm:col-span-2 pt-2 border-t border-scada-border/40 flex items-center justify-between">
+                <label className={`flex items-center space-x-2 text-xs select-none ${isLocked ? 'cursor-default opacity-85' : 'cursor-pointer'}`}>
+                  <input
+                    type="checkbox"
+                    checked={autoRepairOnArrival}
+                    onChange={(e) => !isLocked && setAutoRepairOnArrival(e.target.checked)}
+                    disabled={isLocked}
+                    className="w-4 h-4 rounded text-cyan-500 bg-scada-bg border-scada-border focus:ring-cyan-500 disabled:opacity-80"
+                  />
+                  <span className="font-semibold text-slate-200">⚡ Auto-execute physical repair upon crew arrival</span>
+                  <span className="text-[11px] text-slate-400 font-mono">(~30-60s simulation ETA)</span>
+                </label>
               </div>
 
             </div>
@@ -573,18 +698,31 @@ export const FieldDispatchModal: React.FC = () => {
             onClick={() => setIsDispatchModalOpen(false)}
             className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs transition-colors"
           >
-            {dispatchedResult ? 'Close Window' : 'Cancel'}
+            {isLocked ? 'Close Window' : 'Cancel'}
           </button>
 
           <div className="flex items-center space-x-3">
-            {dispatchedResult ? (
-              <button
-                onClick={handlePrint}
-                className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold text-xs flex items-center space-x-2 shadow-[0_0_15px_rgba(16,185,129,0.3)] transition-all"
-              >
-                <Printer className="w-4 h-4" />
-                <span>Print Official Work Order</span>
-              </button>
+            {isLocked ? (
+              <>
+                {currentActiveDispatch && currentActiveDispatch.phase !== 'repaired' && (
+                  <button
+                    disabled={isSubmitting}
+                    onClick={handleImmediateRepair}
+                    className="px-4 py-2 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs flex items-center space-x-1.5 shadow-[0_0_15px_rgba(16,185,129,0.3)] transition-all disabled:opacity-50"
+                  >
+                    <Wrench className="w-3.5 h-3.5" />
+                    <span>🛠️ Complete Field Repair Now</span>
+                  </button>
+                )}
+
+                <button
+                  onClick={handlePrint}
+                  className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold text-xs flex items-center space-x-2 shadow-[0_0_15px_rgba(16,185,129,0.3)] transition-all"
+                >
+                  <Printer className="w-4 h-4" />
+                  <span>Print Official Work Order</span>
+                </button>
+              </>
             ) : (
               <button
                 disabled={isSubmitting}

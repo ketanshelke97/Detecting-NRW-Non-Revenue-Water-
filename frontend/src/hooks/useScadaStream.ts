@@ -133,10 +133,15 @@ function disconnectSharedWebSocket() {
   notifySubscribers(false);
 }
 
-function sendSharedCommand(cmd: Record<string, any>) {
+export function sendSharedCommand(cmd: Record<string, any>) {
   if (sharedWs && sharedWs.readyState === WebSocket.OPEN) {
     sharedWs.send(JSON.stringify(cmd));
   }
+}
+
+export function triggerClearFault() {
+  useScadaStore.getState().setActiveFault(null);
+  sendSharedCommand({ action: 'clear_fault' });
 }
 
 export function useScadaStream() {

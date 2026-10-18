@@ -126,6 +126,35 @@ interface ScadaState {
   setIsDispatchModalOpen: (open: boolean) => void;
   setDispatchIncidentTarget: (incident: any | null) => void;
   openDispatchModal: (incident?: any) => void;
+
+  // Active Field Dispatches & Lifecycle
+  activeDispatches: ActiveDispatch[];
+  addActiveDispatch: (dispatch: {
+    incidentId: number;
+    incidentCode: string;
+    nodeId: string;
+    teamName: string;
+    technicianName?: string;
+    etaSeconds: number;
+    autoRepair: boolean;
+  }) => void;
+  tickDispatchCountdown: () => void;
+  removeActiveDispatch: (incidentId: number) => void;
+  markDispatchRepaired: (incidentId: number) => void;
+}
+
+export interface ActiveDispatch {
+  incidentId: number;
+  incidentCode: string;
+  nodeId: string;
+  teamName: string;
+  technicianName?: string;
+  etaSeconds: number;
+  remainingSeconds: number;
+  autoRepair: boolean;
+  phase: 'en_route' | 'on_site' | 'repaired';
+  dispatchedAt: number;
+  isExecuted?: boolean;
 }
 
 export const useScadaStore = create<ScadaState>((set) => ({
@@ -167,6 +196,7 @@ export const useScadaStore = create<ScadaState>((set) => ({
   // Dispatch modal defaults
   isDispatchModalOpen: false,
   dispatchIncidentTarget: null,
+  activeDispatches: [],
   
   setSelectedNodeId: (id) => set({ selectedNodeId: id }),
   setActiveScenarioId: (id) => set({ activeScenarioId: id }),
@@ -231,5 +261,48 @@ export const useScadaStore = create<ScadaState>((set) => ({
     dispatchIncidentTarget: incident || null, 
     isDispatchModalOpen: true 
   }),
+
+  // Active Field Dispatches & Lifecycle
+  addActiveDispatch: (dispatch) => set((state) => {
+    const filtered = state.activeDispatches.filter((d) => d.incidentId !== dispatch.incidentId);
+    return {
+      activeDispatches: [
+        ...filtered,
+        {
+          ...dispatch,
+          remainingSeconds: dispatch.etaSeconds,
+          phase: 'en_route',
+          dispatchedAt: Date.now(),
+          isExecuted: false,
+        }
+      ]
+    };
+  }),
+
+  tickDispatchCountdown: () => set((state) => {
+    if (state.activeDispatches.length === 0) return state;
+    const updated = state.activeDispatches.map((d) => {
+      if (d.phase === 'repaired') return d;
+      const nextRemaining = Math.max(0, d.remainingSeconds - 1);
+      const nextPhase: 'en_route' | 'on_site' | 'repaired' = 
+        nextRemaining <= 0 ? 'repaired' : (nextRemaining <= 15 ? 'on_site' : 'en_route');
+      return {
+        ...d,
+        remainingSeconds: nextRemaining,
+        phase: nextPhase,
+      };
+    });
+    return { activeDispatches: updated };
+  }),
+
+  removeActiveDispatch: (incidentId) => set((state) => ({
+    activeDispatches: state.activeDispatches.filter((d) => d.incidentId !== incidentId)
+  })),
+
+  markDispatchRepaired: (incidentId) => set((state) => ({
+    activeDispatches: state.activeDispatches.map((d) => 
+      d.incidentId === incidentId ? { ...d, phase: 'repaired', remainingSeconds: 0, isExecuted: true } : d
+    )
+  })),
 }));
 

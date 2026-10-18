@@ -17,6 +17,7 @@ import { NrwLossTicker } from './components/scada/NrwLossTicker';
 import { IncidentLogDrawer } from './components/scada/IncidentLogDrawer';
 import { FieldDispatchModal } from './components/scada/FieldDispatchModal';
 import { incidentService } from './services/incidentService';
+import { executeFieldRepair } from './services/fieldDispatchService';
 
 function App() {
   const { data: topology, isLoading, error } = useNetworkTopology();
@@ -27,6 +28,27 @@ function App() {
   const setIsIncidentDrawerOpen = useScadaStore((state) => state.setIsIncidentDrawerOpen);
   const setActiveIncidentCount = useScadaStore((state) => state.setActiveIncidentCount);
   const setCriticalIncidentCount = useScadaStore((state) => state.setCriticalIncidentCount);
+  const activeDispatches = useScadaStore((state) => state.activeDispatches);
+  const tickDispatchCountdown = useScadaStore((state) => state.tickDispatchCountdown);
+
+  // Field Crew Lifecycle Countdown & Auto-Repair Runner
+  useEffect(() => {
+    if (activeDispatches.length === 0) return;
+
+    const timer = setInterval(() => {
+      tickDispatchCountdown();
+
+      const currentDispatches = useScadaStore.getState().activeDispatches;
+      for (const d of currentDispatches) {
+        if (d.autoRepair && !d.isExecuted && d.remainingSeconds <= 1) {
+          useScadaStore.getState().markDispatchRepaired(d.incidentId);
+          executeFieldRepair(d.incidentId, d.nodeId);
+        }
+      }
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [activeDispatches.length, tickDispatchCountdown]);
 
   // Initial load of incident count on mount
   useEffect(() => {

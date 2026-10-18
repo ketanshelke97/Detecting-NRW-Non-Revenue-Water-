@@ -11,8 +11,11 @@ import {
   Crosshair, 
   ShieldCheck,
   Radio,
-  Truck
+  Truck,
+  HardHat,
+  Wrench
 } from 'lucide-react';
+import { executeFieldRepair } from '../../services/fieldDispatchService';
 
 export const AiDiagnosticPanel: React.FC = () => {
   const latestInference = useScadaStore((state) => state.latestInference);
@@ -20,6 +23,7 @@ export const AiDiagnosticPanel: React.FC = () => {
   const setSelectedNodeId = useScadaStore((state) => state.setSelectedNodeId);
   const activeFault = useScadaStore((state) => state.activeFault);
   const openDispatchModal = useScadaStore((state) => state.openDispatchModal);
+  const activeDispatches = useScadaStore((state) => state.activeDispatches);
 
   const isLeak = latestInference?.status === 'LEAK_DETECTED';
   const localization = isLeak ? (latestInference?.localization || []) : [];
@@ -328,9 +332,9 @@ export const AiDiagnosticPanel: React.FC = () => {
           </div>
         </div>
 
-        {/* Phase 4 Step 4: 1-Click Jal Shakti Dispatch Action Strip */}
+        {/* Phase 4 Step 4: 1-Click Jal Shakti Dispatch Action Strip & Lifecycle */}
         {isLeak && (
-          <div className="pt-2.5 border-t border-slate-800/80 flex items-center justify-between">
+          <div className="pt-2.5 border-t border-slate-800/80 flex items-center justify-between flex-wrap gap-2">
             <div className="flex items-center space-x-2 text-xs text-slate-300">
               <span className="w-2 h-2 rounded-full bg-red-400 animate-ping" />
               <span className="text-[11px] font-medium text-slate-300">
@@ -338,20 +342,50 @@ export const AiDiagnosticPanel: React.FC = () => {
               </span>
             </div>
 
-            <button
-              onClick={() => openDispatchModal({
-                node_id: topCandidate?.node_id || '21',
-                leak_type: dynamics,
-                diameter_mm: diameterMm,
-                water_loss_liters_per_hour: latestInference?.loss?.liters_per_hour || 5000,
-                financial_loss_inr_per_hour: latestInference?.loss?.financial_loss_inr_per_hour || 125,
-                severity: diameterMm >= 50 ? 'Critical' : 'Warning'
-              })}
-              className="px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold text-xs flex items-center space-x-1.5 shadow-[0_0_15px_rgba(6,182,212,0.35)] transition-all"
-            >
-              <Truck className="w-3.5 h-3.5" />
-              <span>⚡ 1-Click Crew Dispatch</span>
-            </button>
+            {(() => {
+              const targetNode = topCandidate?.node_id || '21';
+              const disp = activeDispatches.find((d) => d.nodeId === targetNode && d.phase !== 'repaired');
+              if (disp) {
+                return (
+                  <div className="flex items-center space-x-2">
+                    <button
+                      onClick={() => openDispatchModal({ node_id: targetNode, status: 'Dispatched', id: disp.incidentId })}
+                      className="px-3 py-1.5 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/40 text-xs font-bold flex items-center space-x-1.5 animate-pulse"
+                      title="View active work order ticket"
+                    >
+                      <HardHat className="w-3.5 h-3.5" />
+                      <span>{disp.phase === 'en_route' ? `En Route (${disp.remainingSeconds}s)` : `Clamping (${disp.remainingSeconds}s)`}</span>
+                    </button>
+
+                    <button
+                      onClick={() => executeFieldRepair(disp.incidentId, disp.nodeId)}
+                      className="px-3 py-1.5 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs flex items-center space-x-1.5 shadow-[0_0_12px_rgba(16,185,129,0.3)] transition-all"
+                      title="Complete simulated field repair and normalize pressure immediately"
+                    >
+                      <Wrench className="w-3.5 h-3.5" />
+                      <span>Complete Repair</span>
+                    </button>
+                  </div>
+                );
+              }
+
+              return (
+                <button
+                  onClick={() => openDispatchModal({
+                    node_id: targetNode,
+                    leak_type: dynamics,
+                    diameter_mm: diameterMm,
+                    water_loss_liters_per_hour: latestInference?.loss?.liters_per_hour || 5000,
+                    financial_loss_inr_per_hour: latestInference?.loss?.financial_loss_inr_per_hour || 125,
+                    severity: diameterMm >= 50 ? 'Critical' : 'Warning'
+                  })}
+                  className="px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold text-xs flex items-center space-x-1.5 shadow-[0_0_15px_rgba(6,182,212,0.35)] transition-all"
+                >
+                  <Truck className="w-3.5 h-3.5" />
+                  <span>⚡ 1-Click Crew Dispatch</span>
+                </button>
+              );
+            })()}
           </div>
         )}
       </CardContent>

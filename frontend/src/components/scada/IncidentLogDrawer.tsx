@@ -15,10 +15,12 @@ import {
   Clock,
   IndianRupee,
   Truck,
-  HardHat
+  HardHat,
+  Wrench
 } from 'lucide-react';
 import { useScadaStore } from '../../store/scadaStore';
 import { incidentService, type IncidentItem } from '../../services/incidentService';
+import { executeFieldRepair } from '../../services/fieldDispatchService';
 
 export function IncidentLogDrawer() {
   const isIncidentDrawerOpen = useScadaStore((state) => state.isIncidentDrawerOpen);
@@ -31,6 +33,7 @@ export function IncidentLogDrawer() {
   const latestInference = useScadaStore((state) => state.latestInference);
   const nodeData = useScadaStore((state) => state.nodeData);
   const openDispatchModal = useScadaStore((state) => state.openDispatchModal);
+  const activeDispatches = useScadaStore((state) => state.activeDispatches);
 
   // Filter & Search State
   const [searchQuery, setSearchQuery] = useState('');
@@ -490,14 +493,40 @@ export function IncidentLogDrawer() {
 
                       {!isResolved && (
                         isDispatched ? (
-                          <button
-                            onClick={() => openDispatchModal(incident)}
-                            className="px-3 py-1.5 rounded-lg bg-amber-500/20 border border-amber-500/40 hover:bg-amber-500/30 text-amber-300 font-semibold text-xs flex items-center space-x-1.5 transition-all"
-                            title="View or update work order details"
-                          >
-                            <HardHat className="w-3.5 h-3.5 text-amber-400" />
-                            <span>{incident.dispatch_team || 'Crew Dispatched'}</span>
-                          </button>
+                          <div className="flex items-center space-x-2">
+                            <button
+                              onClick={() => openDispatchModal(incident)}
+                              className="px-3 py-1.5 rounded-lg bg-amber-500/20 border border-amber-500/40 hover:bg-amber-500/30 text-amber-300 font-semibold text-xs flex items-center space-x-1.5 transition-all"
+                              title="View official work order and isolation boundary"
+                            >
+                              <HardHat className="w-3.5 h-3.5 text-amber-400" />
+                              <span>
+                                {activeDispatches.find(d => d.incidentId === incident.id)?.phase === 'en_route'
+                                  ? `En Route (${activeDispatches.find(d => d.incidentId === incident.id)?.remainingSeconds}s)`
+                                  : activeDispatches.find(d => d.incidentId === incident.id)?.phase === 'on_site'
+                                  ? `Clamping (${activeDispatches.find(d => d.incidentId === incident.id)?.remainingSeconds}s)`
+                                  : incident.dispatch_team || 'Crew Dispatched'}
+                              </span>
+                            </button>
+
+                            <button
+                              disabled={actionInProgressId === incident.id}
+                              onClick={async () => {
+                                setActionInProgressId(incident.id);
+                                try {
+                                  await executeFieldRepair(incident.id, incident.node_id);
+                                  await loadIncidents();
+                                } finally {
+                                  setActionInProgressId(null);
+                                }
+                              }}
+                              className="px-3 py-1.5 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-semibold text-xs flex items-center space-x-1.5 transition-all shadow-[0_0_12px_rgba(16,185,129,0.3)] disabled:opacity-50"
+                              title="Simulate completed field repair and restore hydraulic baseline"
+                            >
+                              <Wrench className="w-3.5 h-3.5" />
+                              <span>Complete Repair</span>
+                            </button>
+                          </div>
                         ) : (
                           <button
                             onClick={() => openDispatchModal(incident)}
@@ -510,18 +539,18 @@ export function IncidentLogDrawer() {
                         )
                       )}
 
-                      {!isResolved && (
+                      {!isResolved && !isDispatched && (
                         isNodeActivelyLeaking ? (
                           <div 
                             className="flex items-center space-x-1" 
-                            title={`Cannot resolve: Active leak/pressure deficit detected at Junction ${incident.node_id}. Please remove injected fault in Fault Lab or normalize pressure before resolving.`}
+                            title={`Cannot resolve: Active leak/pressure deficit detected at Junction ${incident.node_id}. Please dispatch crew or normalize pressure before resolving.`}
                           >
                             <button
                               disabled={true}
                               className="px-3 py-1.5 rounded-lg bg-amber-500/15 border border-amber-500/40 text-amber-300 font-semibold text-xs flex items-center space-x-1.5 cursor-not-allowed opacity-90 shadow-[0_0_10px_rgba(245,158,11,0.2)]"
                             >
                               <AlertTriangle className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
-                              <span>Leak Active • Normalize to Resolve</span>
+                              <span>Leak Active • Dispatch Crew</span>
                             </button>
                           </div>
                         ) : (
