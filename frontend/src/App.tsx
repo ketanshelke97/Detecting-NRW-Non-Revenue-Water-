@@ -1,4 +1,5 @@
 
+import { useEffect } from 'react';
 import { Layout } from './components/layout/Layout';
 import { Card, CardHeader, CardTitle, CardContent } from './components/ui/Card';
 import { Badge } from './components/ui/Badge';
@@ -13,6 +14,8 @@ import { FaultInjectionPanel } from './components/scada/FaultInjectionPanel';
 import { TelemetryDeck } from './components/scada/TelemetryDeck';
 import { AiDiagnosticPanel } from './components/scada/AiDiagnosticPanel';
 import { NrwLossTicker } from './components/scada/NrwLossTicker';
+import { IncidentLogDrawer } from './components/scada/IncidentLogDrawer';
+import { incidentService } from './services/incidentService';
 
 function App() {
   const { data: topology, isLoading, error } = useNetworkTopology();
@@ -20,6 +23,19 @@ function App() {
   const nodeData = useScadaStore((state) => state.nodeData);
   const latestInference = useScadaStore((state) => state.latestInference);
   const activeFault = useScadaStore((state) => state.activeFault);
+  const setIsIncidentDrawerOpen = useScadaStore((state) => state.setIsIncidentDrawerOpen);
+  const setActiveIncidentCount = useScadaStore((state) => state.setActiveIncidentCount);
+  const setCriticalIncidentCount = useScadaStore((state) => state.setCriticalIncidentCount);
+
+  // Initial load of incident count on mount
+  useEffect(() => {
+    incidentService.fetchIncidents()
+      .then((data) => {
+        setActiveIncidentCount(data.active_count);
+        setCriticalIncidentCount(data.critical_count);
+      })
+      .catch((err) => console.error('[APP] Failed to fetch incidents count:', err));
+  }, [setActiveIncidentCount, setCriticalIncidentCount]);
 
   const isLeak = latestInference?.status === 'LEAK_DETECTED';
   
@@ -79,9 +95,18 @@ function App() {
           </CardContent>
         </Card>
         
-        <Card className="border-slate-800 bg-scada-panel/70">
+        <Card 
+          onClick={() => setIsIncidentDrawerOpen(true)}
+          className={`border-slate-800 bg-scada-panel/70 cursor-pointer transition-all hover:border-scada-accent/50 ${
+            isLeak ? 'ring-1 ring-red-500/50 hover:ring-red-500' : ''
+          }`}
+          title="Click to open SCADA Alarm Center & Chronological Incident Log"
+        >
           <CardHeader className="pb-2">
-            <CardTitle className="text-xs text-slate-400 uppercase tracking-wider font-semibold">Active Leaks</CardTitle>
+            <CardTitle className="text-xs text-slate-400 uppercase tracking-wider font-semibold flex items-center justify-between">
+              <span>Active Leaks</span>
+              <span className="text-[10px] text-scada-accent lowercase font-normal">view log &rarr;</span>
+            </CardTitle>
           </CardHeader>
           <CardContent className="flex items-center justify-between">
             <span className={`text-2xl font-bold tracking-tight ${isLeak ? 'text-red-400' : 'text-slate-100'}`}>
@@ -168,6 +193,7 @@ function App() {
 
       <ScenarioCatalogDrawer />
       <FaultInjectionPanel />
+      <IncidentLogDrawer />
     </Layout>
   );
 }

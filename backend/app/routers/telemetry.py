@@ -127,7 +127,162 @@ async def scada_stream(websocket: WebSocket):
     current_step = 0
 
     # Fault injection state
+    # Fault injection state
     active_fault = None  # dict: {node_id, leak_type, diameter_mm, step_count}
+    # Multi-node latched incidents map: node_id -> incident_id
+    active_latched_incidents: Dict[str, int] = {}
+    active_incident_stats: Dict[str, Dict[str, Any]] = {}
+    last_processed_step: Optional[int] = None
+
+    def latch_or_update_incident(inf: dict, ts_str: str, step_idx: int) -> Optional[dict]:
+        nonlocal active_latched_incidents, active_incident_stats, last_processed_step
+        if not inf or inf.get("status") != "LEAK_DETECTED":
+            active_latched_incidents.clear()
+            active_incident_stats.clear()
+            return None
+
+        localization = inf.get("localization") or []
+        top_node = localization[0].get("node_id") if localization else "21"
+        dynamics = inf.get("dynamics", "Abrupt Rupture")
+        instant_diameter_mm = float(inf.get("diameter_mm", 50.0))
+        loss = inf.get("loss") or {}
+        lph = float(loss.get("liters_per_hour", 0.0))
+        inr_per_hour = float(loss.get("financial_loss_inr_per_hour", 0.0))
+
+        # Categorize incident origin source: Live SCADA vs Historical Benchmarks
+        if active_scenario_id is not None:
+            source = "benchmark_scenario"
+        else:
+            source = "live_telemetry"
+
+        node_key = str(top_node)
+        active_leak_nodes = {str(l.get("node_id")) for l in localization if l.get("probability", 0) >= 0.35}
+        if not active_leak_nodes and top_node:
+            active_leak_nodes = {node_key}
+
+        # Prune nodes that have returned to nominal pressure
+        for n in list(active_latched_incidents.keys()):
+            if n not in active_leak_nodes:
+                active_latched_incidents.pop(n, None)
+                active_incident_stats.pop(n, None)
+
+        # Simulation hydraulic timestep is 30 minutes (0.5 hours) per step
+        dt_hours = 0.5
+        step_vol_m3 = (lph * dt_hours) / 1000.0
+        step_cost_inr = inr_per_hour * dt_hours
+
+        # Only accumulate if this is a newly advanced simulation step (avoids re-accumulation during paused seeks/inspects)
+        is_step_advanced = (step_idx != last_processed_step)
+        if is_step_advanced:
+            last_processed_step = step_idx
+
+        # Update running average diameter statistics across all incident timestamps
+        if node_key not in active_incident_stats:
+            active_incident_stats[node_key] = {
+                "count": 1,
+                "sum_diameter": instant_diameter_mm
+            }
+        elif is_step_advanced:
+            active_incident_stats[node_key]["count"] += 1
+            active_incident_stats[node_key]["sum_diameter"] += instant_diameter_mm
+
+        stat = active_incident_stats[node_key]
+        avg_diameter = stat["sum_diameter"] / max(1, stat["count"])
+
+        # Determine severity based on running average diameter and efflux rate
+        if avg_diameter >= 50.0 or lph >= 5000:
+            sev = "Critical"
+        elif avg_diameter >= 15.0 or lph >= 1000:
+            sev = "Warning"
+        else:
+            sev = "Info"
+
+        db_path = os.path.join(settings.BASE_DIR, "leakdb.sqlite")
+        conn = None
+        try:
+            conn = sqlite3.connect(db_path)
+            with conn:
+                latched_id = active_latched_incidents.get(node_key)
+                if latched_id is None:
+                    cursor = conn.cursor()
+                    cursor.execute("""
+                        INSERT INTO incidents (
+                            timestamp, node_id, leak_type, diameter_mm, water_loss_liters_per_hour,
+                            financial_loss_inr_per_hour, severity, source, total_volume_lost_m3, total_cost_inr, status
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (
+                        ts_str,
+                        node_key,
+                        dynamics,
+                        round(avg_diameter, 1),
+                        lph,
+                        inr_per_hour,
+                        sev,
+                        source,
+                        round(step_vol_m3, 3),
+                        round(step_cost_inr, 2),
+                        "New"
+                    ))
+                    new_id = cursor.lastrowid
+                    code = f"INC-2026-{new_id:04d}"
+                    cursor.execute("UPDATE incidents SET incident_code = ? WHERE id = ?", (code, new_id))
+                    active_latched_incidents[node_key] = new_id
+                    return {
+                        "id": new_id,
+                        "incident_code": code,
+                        "status": "New",
+                        "severity": sev,
+                        "source": source,
+                        "node_id": node_key,
+                        "diameter_mm": round(avg_diameter, 1),
+                        "total_volume_lost_m3": round(step_vol_m3, 3),
+                        "total_cost_inr": round(step_cost_inr, 2),
+                        "is_newly_latched": True
+                    }
+                else:
+                    cursor = conn.cursor()
+                    inc_vol = round(step_vol_m3, 4) if is_step_advanced else 0.0
+                    inc_cost = round(step_cost_inr, 2) if is_step_advanced else 0.0
+
+                    cursor.execute("""
+                        UPDATE incidents
+                        SET total_volume_lost_m3 = total_volume_lost_m3 + ?,
+                            total_cost_inr = total_cost_inr + ?,
+                            water_loss_liters_per_hour = ?,
+                            financial_loss_inr_per_hour = ?,
+                            diameter_mm = ?,
+                            severity = ?
+                        WHERE id = ?
+                    """, (
+                        inc_vol,
+                        inc_cost,
+                        lph,
+                        inr_per_hour,
+                        round(avg_diameter, 1),
+                        sev,
+                        latched_id
+                    ))
+                    cursor.execute("SELECT total_volume_lost_m3, total_cost_inr FROM incidents WHERE id = ?", (latched_id,))
+                    row = cursor.fetchone()
+                    curr_vol = row[0] if row else 0.0
+                    curr_cost = row[1] if row else 0.0
+
+                    return {
+                        "id": latched_id,
+                        "incident_code": f"INC-2026-{latched_id:04d}",
+                        "source": source,
+                        "node_id": node_key,
+                        "diameter_mm": round(avg_diameter, 1),
+                        "total_volume_lost_m3": round(curr_vol, 3),
+                        "total_cost_inr": round(curr_cost, 2),
+                        "is_newly_latched": False
+                    }
+        except Exception as e:
+            print(f"[INCIDENT LATCH] Error: {e}")
+            return None
+        finally:
+            if conn:
+                conn.close()
 
     def generate_live_readings(step: int) -> tuple[str, dict]:
         # 48 steps = 24-hr diurnal cycle (Net1 benchmark demand curve)
@@ -203,6 +358,7 @@ async def scada_stream(websocket: WebSocket):
             ts, raw_reading = generate_live_readings(step_idx)
             reading = apply_fault_overlay(raw_reading)
             inf = engine.predict(readings=reading, fault_context=active_fault)
+            latched_inc = latch_or_update_incident(inf, ts, step_idx)
             packet = {
                 "scenario_id": None,
                 "timestamp": ts,
@@ -210,6 +366,7 @@ async def scada_stream(websocket: WebSocket):
                 "total_steps": 120,
                 "readings": reading,
                 "inference": inf,
+                "active_incident": latched_inc,
                 "is_paused": is_paused,
                 "speed": speed,
                 "mode": "live",
@@ -227,6 +384,7 @@ async def scada_stream(websocket: WebSocket):
             ts, raw_reading = parsed_rows[idx]
             reading = apply_fault_overlay(raw_reading)
             inf = engine.predict(readings=reading, fault_context=active_fault)
+            latched_inc = latch_or_update_incident(inf, ts, idx)
             packet = {
                 "scenario_id": active_scenario_id,
                 "timestamp": ts,
@@ -234,6 +392,7 @@ async def scada_stream(websocket: WebSocket):
                 "total_steps": total_steps,
                 "readings": reading,
                 "inference": inf,
+                "active_incident": latched_inc,
                 "is_paused": is_paused,
                 "speed": speed,
                 "mode": "historical",
@@ -254,7 +413,7 @@ async def scada_stream(websocket: WebSocket):
             await cmd_queue.put({"action": "disconnect"})
 
     def process_cmd(cmd: dict):
-        nonlocal current_step, live_step, live_start_time, is_paused, speed, mode, active_fault, active_scenario_id
+        nonlocal current_step, live_step, live_start_time, is_paused, speed, mode, active_fault, active_scenario_id, last_processed_step
         action = cmd.get("action", "").lower()
         if action == "play":
             is_paused = False
@@ -272,6 +431,9 @@ async def scada_stream(websocket: WebSocket):
                 current_step = max(0, min(total_steps - 1, target))
             else:
                 live_step = target
+            active_latched_incidents.clear()
+            active_incident_stats.clear()
+            last_processed_step = None
         elif action == "set_speed":
             speed = float(cmd.get("speed", 1.0))
         elif action == "set_mode":
@@ -283,6 +445,9 @@ async def scada_stream(websocket: WebSocket):
             else:
                 mode = "historical"
                 is_paused = True
+            active_latched_incidents.clear()
+            active_incident_stats.clear()
+            last_processed_step = None
             engine.reset_state()
         elif action == "reset":
             if active_scenario_id is None:
@@ -290,11 +455,17 @@ async def scada_stream(websocket: WebSocket):
                 live_start_time = datetime.now()
             else:
                 current_step = 0
+            active_latched_incidents.clear()
+            active_incident_stats.clear()
+            last_processed_step = None
             engine.reset_state()
         elif action == "load_scenario":
             target_scen = cmd.get("scenario_id", "Scenario-111")
             load_scenario_dataset(target_scen)
             is_paused = True
+            active_latched_incidents.clear()
+            active_incident_stats.clear()
+            last_processed_step = None
             engine.reset_state()
         elif action == "inject_fault":
             active_fault = {
@@ -307,6 +478,9 @@ async def scada_stream(websocket: WebSocket):
         elif action == "clear_fault":
             print(f"[FAULT CLEAR] Fault cleared — hydraulic recovery in progress")
             active_fault = None
+            active_latched_incidents.clear()
+            active_incident_stats.clear()
+            last_processed_step = None
             engine.reset_state()
 
     recv_task = asyncio.create_task(receive_cmds())

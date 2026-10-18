@@ -1,16 +1,20 @@
-
 import { useState } from 'react';
-import { Network, Database, Settings, ShieldAlert, BarChart3 } from 'lucide-react';
+import { Network, Database, Settings, ShieldAlert, BarChart3, BellRing } from 'lucide-react';
 import { useScadaStore } from '../../store/scadaStore';
 
 export function Sidebar() {
   const isScenarioCatalogOpen = useScadaStore((state) => state.isScenarioCatalogOpen);
   const setIsScenarioCatalogOpen = useScadaStore((state) => state.setIsScenarioCatalogOpen);
-  const [activeTab, setActiveTab] = useState<'twin' | 'diagnostics' | 'catalog'>('twin');
+  const isIncidentDrawerOpen = useScadaStore((state) => state.isIncidentDrawerOpen);
+  const setIsIncidentDrawerOpen = useScadaStore((state) => state.setIsIncidentDrawerOpen);
+  const activeIncidentCount = useScadaStore((state) => state.activeIncidentCount);
+
+  const [activeTab, setActiveTab] = useState<'twin' | 'diagnostics'>('twin');
 
   const handleDigitalTwinClick = () => {
     setActiveTab('twin');
     setIsScenarioCatalogOpen(false);
+    setIsIncidentDrawerOpen(false);
     const mainContainer = document.getElementById('scada-main-container');
     if (mainContainer) {
       mainContainer.scrollTo({ top: 0, behavior: 'smooth' });
@@ -20,6 +24,7 @@ export function Sidebar() {
   const handleDiagnosticsClick = () => {
     setActiveTab('diagnostics');
     setIsScenarioCatalogOpen(false);
+    setIsIncidentDrawerOpen(false);
     const el = document.getElementById('ai-diagnostics-section');
     if (el) {
       el.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -31,17 +36,30 @@ export function Sidebar() {
   };
 
   const handleCatalogClick = () => {
-    setActiveTab('catalog');
+    setIsIncidentDrawerOpen(false);
     setIsScenarioCatalogOpen(true);
   };
 
-  const isTwinActive = !isScenarioCatalogOpen && activeTab === 'twin';
-  const isDiagnosticsActive = !isScenarioCatalogOpen && activeTab === 'diagnostics';
+  const handleAlarmCenterClick = () => {
+    setIsScenarioCatalogOpen(false);
+    setIsIncidentDrawerOpen(true);
+  };
+
+  const isTwinActive = !isScenarioCatalogOpen && !isIncidentDrawerOpen && activeTab === 'twin';
+  const isDiagnosticsActive = !isScenarioCatalogOpen && !isIncidentDrawerOpen && activeTab === 'diagnostics';
   const isCatalogActive = isScenarioCatalogOpen;
+  const isAlarmsActive = isIncidentDrawerOpen;
 
   const navItems = [
     { icon: Network, label: 'Digital Twin', active: isTwinActive, onClick: handleDigitalTwinClick },
     { icon: ShieldAlert, label: 'Diagnostics', active: isDiagnosticsActive, onClick: handleDiagnosticsClick },
+    { 
+      icon: BellRing, 
+      label: 'Alarm Center', 
+      active: isAlarmsActive, 
+      badge: activeIncidentCount > 0 ? activeIncidentCount : undefined,
+      onClick: handleAlarmCenterClick 
+    },
     { icon: BarChart3, label: 'Historical Audit', active: false, onClick: () => {} },
     { icon: Database, label: 'Scenario Catalog', active: isCatalogActive, onClick: handleCatalogClick },
     { icon: Settings, label: 'Settings', active: false, onClick: () => {} },
@@ -56,14 +74,21 @@ export function Sidebar() {
           <button
             key={idx}
             onClick={item.onClick}
-            className={`flex items-center space-x-3 w-full px-3 py-2.5 rounded-md transition-colors ${
+            className={`flex items-center justify-between w-full px-3 py-2.5 rounded-md transition-colors ${
               item.active 
                 ? 'bg-scada-accent/10 text-scada-accent border border-scada-accent/20' 
                 : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200 border border-transparent'
             }`}
           >
-            <item.icon className="w-5 h-5" />
-            <span className="font-medium text-sm">{item.label}</span>
+            <div className="flex items-center space-x-3">
+              <item.icon className="w-5 h-5" />
+              <span className="font-medium text-sm">{item.label}</span>
+            </div>
+            {item.badge !== undefined && (
+              <span className="px-2 py-0.5 text-xs font-mono font-bold rounded-full bg-red-500 text-slate-950 animate-pulse">
+                {item.badge}
+              </span>
+            )}
           </button>
         ))}
       </div>

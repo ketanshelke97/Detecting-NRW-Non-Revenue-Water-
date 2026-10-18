@@ -70,6 +70,13 @@ interface ScadaState {
   isLiveDvrMode: boolean;
   dvrScrubIndex: number | null;
 
+  // Phase 4 Step 3: Incident Management & Alarm Log State
+  isIncidentDrawerOpen: boolean;
+  activeLatchedIncident: any | null;
+  incidentRefreshTrigger: number;
+  activeIncidentCount: number;
+  criticalIncidentCount: number;
+
   setSelectedNodeId: (id: string | null) => void;
   setActiveScenarioId: (id: string | null) => void;
   setLiveStreamActive: (active: boolean) => void;
@@ -103,6 +110,13 @@ interface ScadaState {
   setIsLiveDvrMode: (active: boolean) => void;
   setDvrScrubIndex: (index: number | null) => void;
   returnToLive: () => void;
+
+  // Incident Management actions
+  setIsIncidentDrawerOpen: (open: boolean) => void;
+  setActiveLatchedIncident: (incident: any | null) => void;
+  triggerIncidentRefresh: () => void;
+  setActiveIncidentCount: (count: number) => void;
+  setCriticalIncidentCount: (count: number) => void;
 }
 
 export const useScadaStore = create<ScadaState>((set) => ({
@@ -133,6 +147,13 @@ export const useScadaStore = create<ScadaState>((set) => ({
   telemetryHistory: [],
   isLiveDvrMode: false,
   dvrScrubIndex: null,
+
+  // Incident defaults
+  isIncidentDrawerOpen: false,
+  activeLatchedIncident: null,
+  incidentRefreshTrigger: 0,
+  activeIncidentCount: 0,
+  criticalIncidentCount: 0,
   
   setSelectedNodeId: (id) => set({ selectedNodeId: id }),
   setActiveScenarioId: (id) => set({ activeScenarioId: id }),
@@ -182,5 +203,12 @@ export const useScadaStore = create<ScadaState>((set) => ({
   setIsLiveDvrMode: (active) => set({ isLiveDvrMode: active }),
   setDvrScrubIndex: (index) => set({ dvrScrubIndex: index }),
   returnToLive: () => set({ isLiveDvrMode: false, dvrScrubIndex: null, isPlaybackPaused: false }),
+
+  // Incident actions
+  setIsIncidentDrawerOpen: (open) => set({ isIncidentDrawerOpen: open }),
+  setActiveLatchedIncident: (incident) => set({ activeLatchedIncident: incident }),
+  triggerIncidentRefresh: () => set((s) => ({ incidentRefreshTrigger: s.incidentRefreshTrigger + 1 })),
+  setActiveIncidentCount: (count) => set({ activeIncidentCount: count }),
+  setCriticalIncidentCount: (count) => set({ criticalIncidentCount: count }),
 }));
 

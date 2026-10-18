@@ -3,13 +3,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 
 # Import routers
-from app.routers import network, scenarios, telemetry
+from app.routers import network, scenarios, telemetry, incidents
 
 from app.core.database import engine, Base
 from app.models import incident
 
-# Create database tables
+# Create database tables and ensure updated schema
 Base.metadata.create_all(bind=engine)
+incident.upgrade_incident_table_schema(engine)
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -30,6 +31,7 @@ app.add_middleware(
 app.include_router(network.router, prefix="/api/network", tags=["network"])
 app.include_router(scenarios.router, prefix="/api/scenarios", tags=["scenarios"])
 app.include_router(telemetry.router, prefix="/api", tags=["telemetry"])
+app.include_router(incidents.router, prefix="/api/incidents", tags=["incidents"])
 
 @app.get("/")
 def root():

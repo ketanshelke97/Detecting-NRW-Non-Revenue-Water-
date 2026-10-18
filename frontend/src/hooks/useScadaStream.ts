@@ -60,6 +60,12 @@ function connectSharedWebSocket() {
         if (data.leak_steps) store.setLeakStepIndices(data.leak_steps);
         if (data.repair_step !== undefined) store.setRepairStep(data.repair_step);
         if (data.is_paused !== undefined && !store.isLiveDvrMode) store.setPlaybackPaused(data.is_paused);
+        if (data.active_incident !== undefined) {
+          store.setActiveLatchedIncident(data.active_incident);
+          if (data.active_incident?.is_newly_latched) {
+            store.triggerIncidentRefresh();
+          }
+        }
 
         // Build synchronized time-series history point (Phase 3 Step 4)
         const pressures: Record<string, number> = {};

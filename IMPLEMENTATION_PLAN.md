@@ -209,9 +209,32 @@ Divided into 5 small, reviewable implementation steps:
     - Positioned as a prominent 12-column SCADA Command Grid (7-col HUD + 5-col Loss Ticker) between `SimulationToolbar` and `DigitalTwinMap`.
     - Fully validated with `npm run build` (0 TypeScript errors) and backend endpoint pipeline tests.
 
-- **Step 3: Chronological Incident Management & Alarm Log** `[PENDING]`:
-  - Persistent SQLite `incidents` schema with REST API endpoints (`GET /api/incidents`, `PATCH /api/incidents/{id}/status`).
-  - Frontend slide-out **Alarm Center / Incident Log Drawer** with chronological alarm cards, severity tags (`Critical`, `Warning`, `Info`), and lifecycle state tracking (`New` $\rightarrow$ `Acknowledged` $\rightarrow$ `Dispatched` $\rightarrow$ `Resolved`).
+- **Step 3: Chronological Incident Management & Alarm Log** `[COMPLETED]`:
+  - **Backend Incident Engine & Persistent SQLite Schema**:
+    - Enhanced [`backend/app/models/incident.py`](file:///c:/Users/Ketan%20suresh%20shelke/NRW/Detecting-NRW-Non-Revenue-Water-/backend/app/models/incident.py) with canonical incident IDs (`INC-2026-XXXX`), severity classifications (`Critical`, `Warning`, `Info`), financial rates, total cumulative volume lost, origin source categorization (`live_telemetry` vs `benchmark_scenario`), and operational lifecycle timestamps (`acknowledged_at`, `resolved_at`).
+    - Added automated schema migration helper `upgrade_incident_table_schema()` running at startup in `backend/app/main.py`.
+    - Created REST API router [`backend/app/routers/incidents.py`](file:///c:/Users/Ketan%20suresh%20shelke/NRW/Detecting-NRW-Non-Revenue-Water-/backend/app/routers/incidents.py) with full CRUD & lifecycle transitions (`GET /api/incidents`, `POST /api/incidents`, `PATCH /api/incidents/{id}/status`, `POST /api/incidents/{id}/acknowledge`, `POST /api/incidents/{id}/resolve`, `DELETE /api/incidents/clear`).
+    - Integrated multi-node concurrent SCADA auto-latching in [`backend/app/routers/telemetry.py`](file:///c:/Users/Ketan%20suresh%20shelke/NRW/Detecting-NRW-Non-Revenue-Water-/backend/app/routers/telemetry.py):
+      - **Multi-Node Concurrency**: Keyed by `node_id -> incident_id` dictionary to support simultaneous independent burst incidents across network junctions.
+      - **Running Average Orifice Diameter**: Instead of latching the initial onset transient (e.g. 33.7 mm), tracks running cumulative diameter stats across all timesteps ($\bar{d}_N = \frac{1}{N}\sum d_i$) so the stored diameter converges to the true ML model average (e.g. 133.4 mm in Scenario-150).
+      - **0.5-hr Timestep Volume & Cost Synchronization**: Aligned the incremental accumulation with the physical 30-minute ($0.5\text{ hr}$) EPANET/SCADA simulation timestep (`dt_hours = 0.5`), resolving the 1,800× scaling mismatch and ensuring 100% exact numerical match with the NRW Loss Accounting Ticker and Cumulative Loss Chart.
+      - **Timeline Scrub & Seek De-duplication**: Guarded step accumulation with `is_step_advanced` check and cleared latch state upon manual timeline seeking, playback reset, mode changes, or scenario loading.
+  - **Frontend Alarm Center & Incident Log Drawer (`IncidentLogDrawer.tsx`)**:
+    - Slide-out glassmorphism drawer with operational status counters (Total, Active Alerts, Critical, Resolved).
+    - Multi-tab filters (`All`, `Active / New`, `Acknowledged`, `Resolved`), severity dropdown, and source origin filter (`All Sources`, `Live SCADA`, `Historical Benchmarks`).
+    - Instant client-side keyword search across incident codes, junction IDs, dynamics, and notes.
+    - Rich incident cards with color-coded severity tags, relative timestamps, localized junction spotlighting onto Digital Twin map, pipe diameter tags, and compounding burn rate.
+    - Real-time financial & volume metrics formatted with Indian numeric grouping (`en-IN`, e.g. `18,463.6 m³` and `₹4,61,589`).
+    - **Live Auto-Sync Polling**: Automatically refreshes incident records every 2 seconds when drawer is open during simulation streaming.
+    - **Hydraulic Normalization Safety Guard**: Prevents operators from resolving incidents while an active pressure deficit or injected fault is physically persisting at the junction.
+    - Direct 1-click operator workflow actions (`Acknowledge Alarm`, `Mark Resolved`, `Clear Demo Alarms`).
+  - **Header & Sidebar App Integration**:
+    - Top header trigger badge with live alarm count counter and animated pulsing beacon.
+    - Sidebar "Alarm Center" navigation item with unread badge counter.
+    - Clickable "Active Leaks" KPI metric card linking straight to the Alarm Center.
+  - **Verification**:
+    - Validated with `npm run build` (0 TypeScript errors) and automated backend API verification suite [`backend/scripts/test_incidents_api.py`](file:///c:/Users/Ketan%20suresh%20shelke/NRW/Detecting-NRW-Non-Revenue-Water-/backend/scripts/test_incidents_api.py) (100% passing).
+    - End-to-end verified using EPANET Scenario-150: confirmed running average diameter (~133.4 mm) and synchronized volume/cost matching between Alarm Center and NRW Loss Ticker.
 
 - **Step 4: 1-Click Jal Shakti Field Crew Dispatch Modal** `[PENDING]`:
   - Interactive dispatch modal triggered directly from an active alert, incident card, or localized map node.

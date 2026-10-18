@@ -1,7 +1,14 @@
-
-import { Droplets, Activity } from 'lucide-react';
+import { Droplets, Activity, ShieldAlert, BellRing } from 'lucide-react';
+import { useScadaStore } from '../../store/scadaStore';
 
 export function Header() {
+  const activeIncidentCount = useScadaStore((state) => state.activeIncidentCount);
+  const criticalIncidentCount = useScadaStore((state) => state.criticalIncidentCount);
+  const setIsIncidentDrawerOpen = useScadaStore((state) => state.setIsIncidentDrawerOpen);
+  const latestInference = useScadaStore((state) => state.latestInference);
+
+  const isLeak = latestInference?.status === 'LEAK_DETECTED';
+
   return (
     <header className="h-16 bg-scada-panel border-b border-scada-border flex items-center justify-between px-6 shrink-0 z-10 shadow-md">
       <div className="flex items-center space-x-4">
@@ -18,14 +25,49 @@ export function Header() {
       </div>
 
       <div className="flex items-center space-x-6">
+        {/* Interactive Alarm Center Trigger */}
+        <button
+          onClick={() => setIsIncidentDrawerOpen(true)}
+          className={`flex items-center space-x-2 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all ${
+            activeIncidentCount > 0
+              ? 'bg-red-500/15 border-red-500/40 text-red-300 hover:bg-red-500/25 shadow-[0_0_15px_rgba(239,68,68,0.25)]'
+              : 'bg-scada-bg/80 border-scada-border text-slate-300 hover:bg-slate-800'
+          }`}
+          title={`Open SCADA Alarm Center (${activeIncidentCount} Active, ${criticalIncidentCount} Critical)`}
+        >
+          {activeIncidentCount > 0 ? (
+            <ShieldAlert className="w-4 h-4 text-red-400 animate-pulse" />
+          ) : (
+            <BellRing className="w-4 h-4 text-slate-400" />
+          )}
+          <span>Alarm Center</span>
+          <span className={`px-1.5 py-0.2 rounded-full font-mono text-[11px] ${
+            activeIncidentCount > 0 
+              ? 'bg-red-500 text-slate-950 font-bold' 
+              : 'bg-slate-700 text-slate-300'
+          }`}>
+            {activeIncidentCount}
+          </span>
+        </button>
+
+        <div className="h-8 w-px bg-scada-border"></div>
+
         <div className="flex flex-col items-end">
           <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider mb-1">Network Status</span>
           <div className="flex items-center space-x-2">
             <span className="relative flex h-2.5 w-2.5">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-scada-success opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-scada-success"></span>
+              <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
+                isLeak ? 'bg-scada-danger' : 'bg-scada-success'
+              }`}></span>
+              <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${
+                isLeak ? 'bg-scada-danger' : 'bg-scada-success'
+              }`}></span>
             </span>
-            <span className="text-sm font-semibold text-scada-success">NOMINAL</span>
+            <span className={`text-sm font-semibold ${
+              isLeak ? 'text-red-400 animate-pulse' : 'text-scada-success'
+            }`}>
+              {isLeak ? 'LEAK ALERT' : 'NOMINAL'}
+            </span>
           </div>
         </div>
 
