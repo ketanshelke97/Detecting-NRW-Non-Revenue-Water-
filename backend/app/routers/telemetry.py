@@ -1,5 +1,5 @@
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
 router = APIRouter()
 
@@ -130,7 +130,7 @@ async def scada_stream(websocket: WebSocket):
     # Fault injection state
     active_fault = None  # dict: {node_id, leak_type, diameter_mm, step_count}
     # Multi-node latched incidents map: node_id -> incident_id
-    active_latched_incidents: Dict[str, int] = {}
+    active_latched_incidents: Dict[str, Optional[int]] = {}
     active_incident_stats: Dict[str, Dict[str, Any]] = {}
     active_scenario_incident_id: Optional[int] = None
     last_processed_step: Optional[int] = None
