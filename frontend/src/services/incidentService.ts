@@ -13,7 +13,85 @@ export interface IncidentItem {
   total_cost_inr: number;
   status: 'New' | 'Acknowledged' | 'Dispatched' | 'Resolved';
   acknowledged_at?: string | null;
+  dispatched_at?: string | null;
   resolved_at?: string | null;
+  dispatch_team?: string | null;
+  technician_name?: string | null;
+  contact_number?: string | null;
+  priority?: string | null;
+  work_order_code?: string | null;
+  isolation_valves?: string | null;
+  equipment_checklist?: string | null;
+  notes?: string | null;
+}
+
+export interface DispatchPayload {
+  team_name?: string;
+  technician_name?: string;
+  contact_number?: string;
+  priority?: string;
+  estimated_arrival_minutes?: number;
+  isolation_valves?: string[];
+  equipment_checklist?: string[];
+  notes?: string;
+}
+
+export interface DirectDispatchPayload extends DispatchPayload {
+  node_id: string;
+  leak_type?: string;
+  diameter_mm?: number;
+  water_loss_liters_per_hour?: number;
+  financial_loss_inr_per_hour?: number;
+  severity?: string;
+  source?: string;
+}
+
+export interface WorkOrderData {
+  work_order_code: string;
+  incident_code: string;
+  incident_id: number;
+  status: string;
+  priority: string;
+  created_at: string;
+  dispatched_at?: string | null;
+  resolved_at?: string | null;
+  location: {
+    node_id: string;
+    label: string;
+    zone: string;
+    elevation_m: number;
+    coordinates: {
+      latitude: number;
+      longitude: number;
+    };
+  };
+  hydraulics: {
+    leak_type: string;
+    diameter_mm: number;
+    efflux_liters_per_hour: number;
+    efflux_m3_per_hour: number;
+    burn_rate_inr_per_hour: number;
+    total_volume_lost_m3: number;
+    total_cost_inr: number;
+    severity: string;
+  };
+  isolation_protocol: {
+    target_valves: string[];
+    affected_pipes: string[];
+    procedure_summary: string;
+    estimated_affected_connections: number;
+  };
+  equipment_checklist: string[];
+  field_crew: {
+    team_name: string;
+    technician_name: string;
+    contact_number: string;
+  };
+  authority: {
+    department: string;
+    system: string;
+    sign_off_title: string;
+  };
   notes?: string | null;
 }
 
@@ -59,6 +137,38 @@ export const incidentService = {
     });
     if (!res.ok) {
       throw new Error(`Failed to acknowledge incident: ${res.statusText}`);
+    }
+    return res.json();
+  },
+
+  async dispatchIncident(id: number, payload: DispatchPayload): Promise<IncidentItem> {
+    const res = await fetch(`${BASE_URL}/${id}/dispatch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      throw new Error(`Failed to dispatch crew for incident ${id}: ${res.statusText}`);
+    }
+    return res.json();
+  },
+
+  async dispatchDirectLeak(payload: DirectDispatchPayload): Promise<IncidentItem> {
+    const res = await fetch(`${BASE_URL}/dispatch-direct`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      throw new Error(`Failed to dispatch direct leak: ${res.statusText}`);
+    }
+    return res.json();
+  },
+
+  async fetchWorkOrder(id: number): Promise<WorkOrderData> {
+    const res = await fetch(`${BASE_URL}/${id}/work-order`);
+    if (!res.ok) {
+      throw new Error(`Failed to fetch work order for incident ${id}: ${res.statusText}`);
     }
     return res.json();
   },

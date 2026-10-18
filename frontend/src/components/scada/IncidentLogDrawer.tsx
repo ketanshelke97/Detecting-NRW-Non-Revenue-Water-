@@ -13,7 +13,9 @@ import {
   Check, 
   Trash2,
   Clock,
-  IndianRupee
+  IndianRupee,
+  Truck,
+  HardHat
 } from 'lucide-react';
 import { useScadaStore } from '../../store/scadaStore';
 import { incidentService, type IncidentItem } from '../../services/incidentService';
@@ -28,6 +30,7 @@ export function IncidentLogDrawer() {
   const activeFault = useScadaStore((state) => state.activeFault);
   const latestInference = useScadaStore((state) => state.latestInference);
   const nodeData = useScadaStore((state) => state.nodeData);
+  const openDispatchModal = useScadaStore((state) => state.openDispatchModal);
 
   // Filter & Search State
   const [searchQuery, setSearchQuery] = useState('');
@@ -483,6 +486,28 @@ export function IncidentLogDrawer() {
                           <Eye className="w-3.5 h-3.5" />
                           <span>Acknowledge</span>
                         </button>
+                      )}
+
+                      {!isResolved && (
+                        isDispatched ? (
+                          <button
+                            onClick={() => openDispatchModal(incident)}
+                            className="px-3 py-1.5 rounded-lg bg-amber-500/20 border border-amber-500/40 hover:bg-amber-500/30 text-amber-300 font-semibold text-xs flex items-center space-x-1.5 transition-all"
+                            title="View or update work order details"
+                          >
+                            <HardHat className="w-3.5 h-3.5 text-amber-400" />
+                            <span>{incident.dispatch_team || 'Crew Dispatched'}</span>
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => openDispatchModal(incident)}
+                            className="px-3 py-1.5 rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-semibold text-xs flex items-center space-x-1.5 transition-all shadow-[0_0_12px_rgba(6,182,212,0.3)]"
+                            title="Open Jal Shakti 1-Click Field Crew Work Order & Dispatch Modal"
+                          >
+                            <Truck className="w-3.5 h-3.5" />
+                            <span>Dispatch Crew</span>
+                          </button>
+                        )
                       )}
 
                       {!isResolved && (

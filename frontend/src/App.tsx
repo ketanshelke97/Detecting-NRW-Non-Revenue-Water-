@@ -15,6 +15,7 @@ import { TelemetryDeck } from './components/scada/TelemetryDeck';
 import { AiDiagnosticPanel } from './components/scada/AiDiagnosticPanel';
 import { NrwLossTicker } from './components/scada/NrwLossTicker';
 import { IncidentLogDrawer } from './components/scada/IncidentLogDrawer';
+import { FieldDispatchModal } from './components/scada/FieldDispatchModal';
 import { incidentService } from './services/incidentService';
 
 function App() {
@@ -194,6 +195,7 @@ function App() {
       <ScenarioCatalogDrawer />
       <FaultInjectionPanel />
       <IncidentLogDrawer />
+      <FieldDispatchModal />
     </Layout>
   );
 }

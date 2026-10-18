@@ -1,4 +1,4 @@
-import { X, Activity, Droplets, AlertTriangle } from 'lucide-react';
+import { X, Activity, Droplets, AlertTriangle, Truck } from 'lucide-react';
 import { useScadaStore } from '../../store/scadaStore';
 import { Badge } from '../ui/Badge';
 import { useNetworkTopology } from '../../hooks/useNetworkTopology';
@@ -9,6 +9,7 @@ export function NodeDetailsDrawer() {
   const nodeData = useScadaStore((state) => state.nodeData);
   const isolatedZoneNodes = useScadaStore((state) => state.isolatedZoneNodes);
   const setIsolatedZoneNodes = useScadaStore((state) => state.setIsolatedZoneNodes);
+  const openDispatchModal = useScadaStore((state) => state.openDispatchModal);
   const { data: topology } = useNetworkTopology();
 
   if (!selectedNodeId) return null;
@@ -136,7 +137,24 @@ export function NodeDetailsDrawer() {
       </div>
 
       {/* Footer Actions */}
-      <div className="p-4 border-t border-scada-border bg-slate-800/50">
+      <div className="p-4 border-t border-scada-border bg-slate-800/50 space-y-2">
+        {telemetry?.isLeak && (
+          <button
+            onClick={() => {
+              openDispatchModal({
+                node_id: selectedNodeId,
+                leak_type: 'Abrupt Rupture',
+                diameter_mm: 50.0,
+                water_loss_liters_per_hour: 5000,
+                severity: 'Critical'
+              });
+            }}
+            className="w-full py-2.5 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold rounded shadow transition-all flex justify-center items-center text-xs"
+          >
+            <Truck className="w-4 h-4 mr-2" />
+            Dispatch Field Crew
+          </button>
+        )}
         <button 
           onClick={() => {
             const connectedNodes = connections?.map((c: any) => c.source === selectedNodeId ? c.target : c.source) || [];

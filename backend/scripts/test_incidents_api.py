@@ -36,14 +36,31 @@ def test_incident_api():
     assert ack_inc["status"] == "Acknowledged"
     assert ack_inc["acknowledged_at"] is not None
 
-    # 4. Update status to Dispatched
-    res_patch = requests.patch(f"{BASE_URL}/{inc_id}/status", json={"status": "Dispatched", "notes": "Crew dispatched to Junction 21"})
-    assert res_patch.status_code == 200, f"PATCH failed: {res_patch.text}"
-    disp_inc = res_patch.json()
-    print(f"PATCH /api/incidents/{inc_id}/status -> Status: {disp_inc['status']}, Notes: {disp_inc['notes']}")
+    # 4. Dispatch incident with crew and isolation valves
+    disp_payload = {
+        "team_name": "Jal Shakti Rapid Response Unit 1",
+        "technician_name": "Er. Rajesh Patil",
+        "contact_number": "+91 98230 11223",
+        "priority": "P1 - Critical",
+        "isolation_valves": ["V-PIPE111", "V-PIPE21", "V-PIPE121"],
+        "notes": "Emergency valve shutoff in progress"
+    }
+    res_disp = requests.post(f"{BASE_URL}/{inc_id}/dispatch", json=disp_payload)
+    assert res_disp.status_code == 200, f"Dispatch failed: {res_disp.text}"
+    disp_inc = res_disp.json()
+    print(f"POST /api/incidents/{inc_id}/dispatch -> Status: {disp_inc['status']}, Team: {disp_inc['dispatch_team']}, WO: {disp_inc['work_order_code']}")
     assert disp_inc["status"] == "Dispatched"
+    assert disp_inc["work_order_code"] is not None
 
-    # 5. Resolve incident
+    # 5. Fetch generated work order
+    res_wo = requests.get(f"{BASE_URL}/{inc_id}/work-order")
+    assert res_wo.status_code == 200, f"Work order fetch failed: {res_wo.text}"
+    wo = res_wo.json()
+    print(f"GET /api/incidents/{inc_id}/work-order -> WO Code: {wo['work_order_code']}, Target Valves: {wo['isolation_protocol']['target_valves']}")
+    assert len(wo["isolation_protocol"]["target_valves"]) >= 1
+    assert len(wo["equipment_checklist"]) >= 3
+
+    # 6. Resolve incident
     res_res = requests.post(f"{BASE_URL}/{inc_id}/resolve")
     assert res_res.status_code == 200, f"Resolve failed: {res_res.text}"
     resolved_inc = res_res.json()
@@ -51,7 +68,7 @@ def test_incident_api():
     assert resolved_inc["status"] == "Resolved"
     assert resolved_inc["resolved_at"] is not None
 
-    print("\n[PASS] All Incident REST API tests passed successfully!")
+    print("\n[PASS] All Incident REST & Field Crew Dispatch API tests passed successfully!")
 
 if __name__ == "__main__":
     try:

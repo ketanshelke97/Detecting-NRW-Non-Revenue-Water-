@@ -236,12 +236,35 @@ Divided into 5 small, reviewable implementation steps:
     - Validated with `npm run build` (0 TypeScript errors) and automated backend API verification suite [`backend/scripts/test_incidents_api.py`](file:///c:/Users/Ketan%20suresh%20shelke/NRW/Detecting-NRW-Non-Revenue-Water-/backend/scripts/test_incidents_api.py) (100% passing).
     - End-to-end verified using EPANET Scenario-150: confirmed running average diameter (~133.4 mm) and synchronized volume/cost matching between Alarm Center and NRW Loss Ticker.
 
-- **Step 4: 1-Click Jal Shakti Field Crew Dispatch Modal** `[PENDING]`:
-  - Interactive dispatch modal triggered directly from an active alert, incident card, or localized map node.
-  - Pre-populates geocoded location, leak characteristics, and estimated burst severity.
-  - **Pipe Isolation Protocol**: Lists exact upstream/downstream valve IDs to shut down.
-  - **Required Crew Equipment Checklist**: Pipe repair clamps (sized to predicted mm diameter), acoustic leak correlator, dewatering pump, and excavation equipment.
-  - 1-Click "Dispatch Crew" action that transitions incident to `Dispatched` and logs field dispatch record.
+- **Step 4: 1-Click Jal Shakti Field Crew Dispatch Modal** `[COMPLETED]`:
+  - **Interactive Glassmorphic Dispatch Modal (`FieldDispatchModal.tsx`)**:
+    - Triggered seamlessly across the platform:
+      - Alarm Center incident card ("Dispatch Crew" button)
+      - AI Diagnostic HUD ("⚡ 1-Click Crew Dispatch" button)
+      - Digital Twin Node Drawer ("Dispatch Field Crew" button)
+    - Pre-populates target geocoding (Net1 Zone, elevation, coordinates), dynamic burst characteristics (dynamics, calibrated diameter, efflux rate in L/h and $m^3/\text{hr}$, and compounding financial burn rate in ₹ INR/hr).
+    - **Hydraulic Pipe Isolation Protocol**: Automatically calculates upstream and downstream valves to shut off (`V-PIPE111`, `V-PIPE21`, `V-PIPE121`, etc.) and affected trunk pipes according to physical Net1 topology, with interactive operator confirmation checkboxes.
+    - **Dynamic Equipment Checklist**: Auto-sizes specialized tooling based on predicted mm orifice diameter:
+      - Stainless steel full-circle repair clamps sized precisely to pipe diameter bracket (e.g. 100–150 mm)
+      - Heavy-duty dewatering pumps (5.5 HP / 10 HP diesel trash pumps)
+      - Acoustic leak correlator & ultrasonic ground hydrophone kit
+      - Trench shoring box / worker cave-in safety shields
+      - High-pressure mechanical coupling sleeves & DI spool segments
+      - Manifold pressure gauge & hypochlorite line chlorination kit
+    - **Field Crew Assignment & Work Order Generation**:
+      - Rapid response unit assignment (Unit 1, Unit 2, Unit 3, Central DMA Crew), lead technician (`Er. Rajesh Patil`), and direct mobile contact.
+      - Emergency priority assignment (`P1 - Critical Emergency (ETA: 15-20 min)`, `P2`, `P3`).
+      - Hazard advisory input field for site-specific notes (traffic diversion, soil liquefaction).
+      - Generates official Jal Shakti Municipal Work Order (`WO-2026-XXXX`).
+      - Printable work order integration (`window.print()`).
+  - **Backend Dispatch Endpoints & Lifecycle Engine**:
+    - Enhanced [`backend/app/models/incident.py`](file:///c:/Users/Ketan%20suresh%20shelke/NRW/Detecting-NRW-Non-Revenue-Water-/backend/app/models/incident.py) with `dispatched_at`, `dispatch_team`, `technician_name`, `contact_number`, `priority`, `work_order_code`, `isolation_valves`, `equipment_checklist`.
+    - Added schema auto-migration `upgrade_incident_table_schema()` running at server launch.
+    - Implemented `POST /api/incidents/{id}/dispatch`, `POST /api/incidents/dispatch-direct`, and `GET /api/incidents/{id}/work-order` in [`backend/app/routers/incidents.py`](file:///c:/Users/Ketan%20suresh%20shelke/NRW/Detecting-NRW-Non-Revenue-Water-/backend/app/routers/incidents.py).
+    - Lifecycle state machine transitions incidents to `Dispatched` and notifies UI in real-time.
+  - **Verification**:
+    - Frontend compiled with `npm run build` (0 TypeScript / JSX errors).
+    - Backend endpoints verified via `backend/scripts/test_incidents_api.py` (100% passing).
 
 - **Step 5: Historical Water Audits & Municipal Technical Audit PDF/Print Export** `[PENDING]`:
   - **Historical Audit Center**: Interactive UI hooked to `Sidebar.tsx` navigation and backed by `POST /api/scenarios/historical-audit`.

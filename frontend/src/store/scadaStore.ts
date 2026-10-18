@@ -77,6 +77,10 @@ interface ScadaState {
   activeIncidentCount: number;
   criticalIncidentCount: number;
 
+  // Phase 4 Step 4: Field Crew Dispatch Modal State
+  isDispatchModalOpen: boolean;
+  dispatchIncidentTarget: any | null;
+
   setSelectedNodeId: (id: string | null) => void;
   setActiveScenarioId: (id: string | null) => void;
   setLiveStreamActive: (active: boolean) => void;
@@ -117,6 +121,11 @@ interface ScadaState {
   triggerIncidentRefresh: () => void;
   setActiveIncidentCount: (count: number) => void;
   setCriticalIncidentCount: (count: number) => void;
+
+  // Field Crew Dispatch actions
+  setIsDispatchModalOpen: (open: boolean) => void;
+  setDispatchIncidentTarget: (incident: any | null) => void;
+  openDispatchModal: (incident?: any) => void;
 }
 
 export const useScadaStore = create<ScadaState>((set) => ({
@@ -154,6 +163,10 @@ export const useScadaStore = create<ScadaState>((set) => ({
   incidentRefreshTrigger: 0,
   activeIncidentCount: 0,
   criticalIncidentCount: 0,
+
+  // Dispatch modal defaults
+  isDispatchModalOpen: false,
+  dispatchIncidentTarget: null,
   
   setSelectedNodeId: (id) => set({ selectedNodeId: id }),
   setActiveScenarioId: (id) => set({ activeScenarioId: id }),
@@ -210,5 +223,13 @@ export const useScadaStore = create<ScadaState>((set) => ({
   triggerIncidentRefresh: () => set((s) => ({ incidentRefreshTrigger: s.incidentRefreshTrigger + 1 })),
   setActiveIncidentCount: (count) => set({ activeIncidentCount: count }),
   setCriticalIncidentCount: (count) => set({ criticalIncidentCount: count }),
+
+  // Field Crew Dispatch actions
+  setIsDispatchModalOpen: (open) => set({ isDispatchModalOpen: open }),
+  setDispatchIncidentTarget: (incident) => set({ dispatchIncidentTarget: incident }),
+  openDispatchModal: (incident) => set({ 
+    dispatchIncidentTarget: incident || null, 
+    isDispatchModalOpen: true 
+  }),
 }));
 

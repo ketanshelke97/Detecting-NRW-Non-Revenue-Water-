@@ -19,7 +19,15 @@ class Incident(Base):
     status = Column(String, default="New") # New, Acknowledged, Dispatched, Resolved
     source = Column(String, default="live_telemetry") # live_telemetry, benchmark_scenario
     acknowledged_at = Column(DateTime, nullable=True)
+    dispatched_at = Column(DateTime, nullable=True)
     resolved_at = Column(DateTime, nullable=True)
+    dispatch_team = Column(String, nullable=True)
+    technician_name = Column(String, nullable=True)
+    contact_number = Column(String, nullable=True)
+    priority = Column(String, default="P1 - Critical") # P1 - Emergency, P2 - High, P3 - Standard
+    work_order_code = Column(String, nullable=True) # e.g. WO-2026-0001
+    isolation_valves = Column(Text, nullable=True) # JSON array of valve IDs
+    equipment_checklist = Column(Text, nullable=True) # JSON array of items
     notes = Column(Text, nullable=True)
 
     def to_dict(self):
@@ -37,6 +45,8 @@ class Incident(Base):
         if not inr_per_hour and self.water_loss_liters_per_hour:
             inr_per_hour = round((self.water_loss_liters_per_hour / 1000.0) * 25.0, 2)
 
+        wo_code = self.work_order_code or (f"WO-2026-{self.id:04d}" if self.status == "Dispatched" else None)
+
         return {
             "id": self.id,
             "incident_code": code,
@@ -52,7 +62,15 @@ class Incident(Base):
             "total_cost_inr": round(self.total_cost_inr or 0.0, 2),
             "status": self.status or "New",
             "acknowledged_at": self.acknowledged_at.isoformat() if self.acknowledged_at else None,
+            "dispatched_at": self.dispatched_at.isoformat() if self.dispatched_at else None,
             "resolved_at": self.resolved_at.isoformat() if self.resolved_at else None,
+            "dispatch_team": self.dispatch_team,
+            "technician_name": self.technician_name,
+            "contact_number": self.contact_number,
+            "priority": self.priority or "P1 - Critical",
+            "work_order_code": wo_code,
+            "isolation_valves": self.isolation_valves,
+            "equipment_checklist": self.equipment_checklist,
             "notes": self.notes
         }
 
@@ -66,7 +84,15 @@ def upgrade_incident_table_schema(engine):
         "total_volume_lost_m3": "FLOAT DEFAULT 0.0",
         "total_cost_inr": "FLOAT DEFAULT 0.0",
         "acknowledged_at": "DATETIME",
+        "dispatched_at": "DATETIME",
         "resolved_at": "DATETIME",
+        "dispatch_team": "VARCHAR",
+        "technician_name": "VARCHAR",
+        "contact_number": "VARCHAR",
+        "priority": "VARCHAR DEFAULT 'P1 - Critical'",
+        "work_order_code": "VARCHAR",
+        "isolation_valves": "TEXT",
+        "equipment_checklist": "TEXT",
         "notes": "TEXT"
     }
     with engine.connect() as conn:
