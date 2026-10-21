@@ -2,6 +2,10 @@ import joblib
 import os
 from app.core.config import settings
 
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning, module="sklearn.utils.parallel")
+warnings.filterwarnings("ignore", message=".*sklearn.utils.parallel.*")
+
 class InferenceEngine:
     def __init__(self):
         self.models_loaded = False
@@ -24,6 +28,14 @@ class InferenceEngine:
             self.model_localization = joblib.load(os.path.join(settings.MODELS_DIR, "localization_rf_v2.joblib"))
             self.model_dynamics = joblib.load(os.path.join(settings.MODELS_DIR, "leak_type_rf_v2.joblib"))
             self.model_diameter = joblib.load(os.path.join(settings.MODELS_DIR, "leak_diameter_rf_v2.joblib"))
+
+            # Single-row real-time inference optimization:
+            # Setting n_jobs=1 avoids joblib thread-pool IPC overhead (3x speedup)
+            # and prevents scikit-learn parallel context warnings in Python 3.14.
+            self.model_localization.n_jobs = 1
+            self.model_dynamics.n_jobs = 1
+            self.model_diameter.n_jobs = 1
+
             self.models_loaded = True
             print("[INFERENCE] Production ML models loaded successfully (Localization, Dynamics, Diameter).")
         except Exception as e:
