@@ -47,7 +47,7 @@ An industrial-grade SCADA Digital Twin and Machine Learning platform for real-ti
 - **Hydraulic Pipe Isolation Checklist**: Calculates exact upstream and downstream isolation valves to close (`V-PIPE111`, `V-PIPE21`, `V-PIPE121`) based on physical Net1 topology.
 - **Smart Tool Auto-Sizing**: Recommends full-circle stainless steel repair clamps, dewatering trash pumps (5.5 HP / 10 HP), and acoustic hydrophones sized to predicted pipe diameter.
 - **Live Response Countdown**: Simulates real-world field progression:
-  $$\text{Dispatched (En Route)} \longrightarrow \text{On-Site (Clamping)} \longrightarrow \text{Repaired & Normalized}$$
+  > **Dispatched (En Route)** ➔ **On-Site (Clamping)** ➔ **Repaired & Normalized**
 
 ### 5. Technical Water Audit & Compliance Certification Center
 - **Forensic Government Certificate**: Standardized Ministry of Jal Shakti compliance certificate (`INSP-AUDIT-2026-XXXX`).
