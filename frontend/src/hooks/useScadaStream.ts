@@ -11,12 +11,26 @@ function notifySubscribers(connected: boolean) {
   subscribers.forEach((cb) => cb(connected));
 }
 
+export const getWebSocketUrl = (): string => {
+  if (import.meta.env.VITE_WS_URL) {
+    return import.meta.env.VITE_WS_URL;
+  }
+  if (typeof window !== 'undefined') {
+    if (window.location.port === '5173') {
+      return 'ws://127.0.0.1:8000/api/ws/scada-stream';
+    }
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    return `${protocol}//${window.location.host}/api/ws/scada-stream`;
+  }
+  return 'ws://127.0.0.1:8000/api/ws/scada-stream';
+};
+
 function connectSharedWebSocket() {
   if (sharedWs && (sharedWs.readyState === WebSocket.OPEN || sharedWs.readyState === WebSocket.CONNECTING)) {
     return;
   }
 
-  const ws = new WebSocket('ws://127.0.0.1:8000/api/ws/scada-stream');
+  const ws = new WebSocket(getWebSocketUrl());
   sharedWs = ws;
 
   ws.onopen = () => {

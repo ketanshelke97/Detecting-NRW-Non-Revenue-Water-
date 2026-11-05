@@ -1,3 +1,5 @@
+import { getApiBaseUrl } from './api';
+
 export interface IncidentItem {
   id: number;
   incident_code: string;
@@ -104,7 +106,7 @@ export interface IncidentsResponse {
   incidents: IncidentItem[];
 }
 
-const BASE_URL = 'http://127.0.0.1:8000/api/incidents';
+const getIncidentsUrl = () => `${getApiBaseUrl()}/api/incidents`;
 
 export const incidentService = {
   async fetchIncidents(params?: { status?: string; severity?: string; source?: string; limit?: number }): Promise<IncidentsResponse> {
@@ -122,7 +124,7 @@ export const incidentService = {
       searchParams.append('limit', String(params.limit));
     }
 
-    const url = `${BASE_URL}${searchParams.toString() ? '?' + searchParams.toString() : ''}`;
+    const url = `${getIncidentsUrl()}${searchParams.toString() ? '?' + searchParams.toString() : ''}`;
     const res = await fetch(url);
     if (!res.ok) {
       throw new Error(`Failed to fetch incidents: ${res.statusText}`);
@@ -131,7 +133,7 @@ export const incidentService = {
   },
 
   async acknowledgeIncident(id: number): Promise<IncidentItem> {
-    const res = await fetch(`${BASE_URL}/${id}/acknowledge`, {
+    const res = await fetch(`${getIncidentsUrl()}/${id}/acknowledge`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
     });
@@ -142,7 +144,7 @@ export const incidentService = {
   },
 
   async dispatchIncident(id: number, payload: DispatchPayload): Promise<IncidentItem> {
-    const res = await fetch(`${BASE_URL}/${id}/dispatch`, {
+    const res = await fetch(`${getIncidentsUrl()}/${id}/dispatch`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -154,7 +156,7 @@ export const incidentService = {
   },
 
   async dispatchDirectLeak(payload: DirectDispatchPayload): Promise<IncidentItem> {
-    const res = await fetch(`${BASE_URL}/dispatch-direct`, {
+    const res = await fetch(`${getIncidentsUrl()}/dispatch-direct`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -166,7 +168,7 @@ export const incidentService = {
   },
 
   async fetchWorkOrder(id: number): Promise<WorkOrderData> {
-    const res = await fetch(`${BASE_URL}/${id}/work-order`);
+    const res = await fetch(`${getIncidentsUrl()}/${id}/work-order`);
     if (!res.ok) {
       throw new Error(`Failed to fetch work order for incident ${id}: ${res.statusText}`);
     }
@@ -174,7 +176,7 @@ export const incidentService = {
   },
 
   async updateIncidentStatus(id: number, status: string, notes?: string): Promise<IncidentItem> {
-    const res = await fetch(`${BASE_URL}/${id}/status`, {
+    const res = await fetch(`${getIncidentsUrl()}/${id}/status`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status, notes }),
@@ -186,7 +188,7 @@ export const incidentService = {
   },
 
   async resolveIncident(id: number): Promise<IncidentItem> {
-    const res = await fetch(`${BASE_URL}/${id}/resolve`, {
+    const res = await fetch(`${getIncidentsUrl()}/${id}/resolve`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
     });
@@ -197,7 +199,7 @@ export const incidentService = {
   },
 
   async clearAllIncidents(): Promise<{ status: string; deleted_count: number }> {
-    const res = await fetch(`${BASE_URL}/clear`, {
+    const res = await fetch(`${getIncidentsUrl()}/clear`, {
       method: 'DELETE',
     });
     if (!res.ok) {
